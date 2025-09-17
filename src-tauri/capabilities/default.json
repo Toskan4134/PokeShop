@@ -1,0 +1,21 @@
+{
+    "$schema": "../gen/schemas/desktop-schema.json",
+    "identifier": "default",
+    "description": "enables the default permissions",
+    "windows": ["main"],
+    "permissions": [
+        "core:default",
+        "fs:default",
+        "fs:allow-exists",
+        "fs:allow-read",
+        "fs:allow-write",
+        "fs:allow-write-text-file",
+        "fs:allow-appdata-read",
+        "fs:allow-appdata-meta",
+        "opener:default",
+        {
+            "identifier": "opener:allow-open-path",
+            "allow": [{ "path": "$DATA/**" }]
+        }
+    ]
+}

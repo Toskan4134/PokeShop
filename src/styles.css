@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+    .btn {
+        @apply px-3 py-1.5 rounded-md bg-blue-600 text-white hover:opacity-90 disabled:opacity-50;
+    }
+    .btn-secondary {
+        @apply px-3 py-1.5 rounded-md bg-neutral-700 text-white hover:opacity-90 disabled:opacity-50;
+    }
+    .btn-danger {
+        @apply px-3 py-1.5 rounded-md bg-red-600 text-white hover:opacity-90 disabled:opacity-50;
+    }
+    .input {
+        @apply border border-neutral-700 rounded-md px-2 py-1.5 bg-neutral-800 text-neutral-100;
+    }
+    .card {
+        @apply border border-neutral-700 rounded-xl bg-neutral-800/70;
+    }
+}
+
+:root,
+html {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    position: relative;
+    background-color: #0a0a0a;
+    min-height: 100%;
+}
+
+main {
+    position: relative;
+    z-index: 1;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    inset: auto 0 0 auto; /* esquina inferior derecha por defecto */
+    width: 40vmin;
+    height: 40vmin;
+    background-repeat: no-repeat;
+    background-size: contain;
+    opacity: 0.06;
+    filter: grayscale(1);
+    z-index: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512' viewBox='0 0 100 100' fill='none' stroke='%239ca3af' stroke-width='4'><circle cx='50' cy='50' r='40'/><path d='M10 50 h80'/><circle cx='50' cy='50' r='10'/></svg>");
+}
+
+/* ===== Media query para pantallas menores a 1024px ===== */
+@media (max-width: 1024px) {
+    body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: 40vmin;
+        width: auto;
+        height: auto;
+        opacity: 0.06;
+        filter: grayscale(1);
+    }
+}

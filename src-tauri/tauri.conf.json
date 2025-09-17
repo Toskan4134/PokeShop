@@ -1,0 +1,28 @@
+{
+    "$schema": "https://schema.tauri.app/config/2",
+    "productName": "PokeShop",
+    "version": "0.1.0",
+    "identifier": "com.Toskan4134.PokeShop",
+    "build": {
+        "devUrl": "http://localhost:5173",
+        "frontendDist": "../dist",
+        "beforeDevCommand": "npm run dev",
+        "beforeBuildCommand": "npm run build"
+    },
+    "app": {
+        "windows": [{ "title": "PokéShop", "width": 1100, "height": 800 }],
+        "security": { "csp": null }
+    },
+    "bundle": {
+        "active": true,
+        "targets": "all",
+        "windows": { "certificateThumbprint": null },
+        "icon": ["icons/icon.png", "icons/icon.ico"]
+    },
+    "plugins": {
+        "fs": {
+            "requireLiteralLeadingDot": false
+        },
+        "opener": {}
+    }
+}
