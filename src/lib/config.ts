@@ -10,7 +10,8 @@ import type { AppConfig, Pokemon } from '../types';
 
 export const DEFAULT_CONFIG: AppConfig = {
     shopSize: 10,
-    quota: { S: 1, A: 2, B: 3, C: 4 },
+    quota: { S: 1, A: 1, B: 1, C: 2 },
+    tierWeights: { C: 40, B: 30, A: 20, S: 10 },
     regionsOrder: ['Kanto', 'Johto'],
     rerollsPerRegion: 2,
     rerollRechargeEveryRegions: 1, // recargar rerolls en cada cambio de región
@@ -21,6 +22,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     tierColors: { S: '#f59e0b', A: '#a855f7', B: '#3b82f6', C: '#22c55e' },
     defaultTierColor: '#9ca3af',
     includePurchasedInRerollPool: false,
+    shopBuySlotAutofill: false,
 };
 
 export const DEFAULT_POKEMON: Pokemon[] = [
@@ -71,6 +73,10 @@ function mergeConfigDefaults(cfg: Partial<AppConfig> | undefined): AppConfig {
         ...base,
         ...input,
         tierColors: { ...(base.tierColors || {}), ...(input.tierColors || {}) },
+        tierWeights: {
+            ...(base.tierWeights || {}),
+            ...(input.tierWeights || {}),
+        },
     };
 }
 

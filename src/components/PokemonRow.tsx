@@ -30,7 +30,7 @@ export default function PokemonRow({
         // Pokémon no disponible (comprado o no quedan más)
         return (
             <div
-                className='card p-3 flex items-center gap-2 text-neutral-100 border-2'
+                className='card p-3 flex items-center gap-2 text-neutral-100'
                 style={{ borderColor }}
             >
                 <div className='flex-1 italic opacity-80'>

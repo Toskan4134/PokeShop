@@ -54,6 +54,9 @@ export interface Snapshot {
 export interface AppConfig {
     shopSize: number;
     quota: Record<string, number>; // ej. { S:2, A:4, B:4 }
+    /** Porcentajes por tier (se normalizan). Ej: { C: 40, B: 30, A: 20, S: 10 } */
+    tierWeights?: Record<string, number>;
+
     regionsOrder: string[];
     rerollsPerRegion: number; // máximo de rerolls globales
 
@@ -72,4 +75,5 @@ export interface AppConfig {
     tierColors?: Record<string, string>; // mapa Tier->color CSS
     defaultTierColor?: string; // color por defecto para tiers desconocidos
     includePurchasedInRerollPool?: boolean; // si true, comprados pueden volver a salir en reroll
+    shopBuySlotAutofill?: boolean; // Rellenar automáticamente el slot tras comprar (si hay huecos)
 }

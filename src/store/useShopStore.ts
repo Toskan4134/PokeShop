@@ -159,15 +159,6 @@ export const useShopStore = create<ShopState>()(
                         },
                         visitedRegions: Array.from(visitedSet),
                         rerollsUsedGlobal: get().rerollsUsedGlobal ?? 0,
-                        history: [
-                            {
-                                id: crypto.randomUUID(),
-                                ts: new Date().toISOString(),
-                                type: 'refresh',
-                                message: `Configuración cargada. Región activa: ${region}`,
-                            },
-                            ...get().history,
-                        ],
                     });
                 } catch (e: any) {
                     const cfg = DEFAULT_CONFIG;
@@ -197,17 +188,6 @@ export const useShopStore = create<ShopState>()(
                         shopByIndex: { [0]: shop },
                         visitedRegions: [region],
                         rerollsUsedGlobal: 0,
-                        history: [
-                            {
-                                id: crypto.randomUUID(),
-                                ts: new Date().toISOString(),
-                                type: 'refresh',
-                                message: `Se usó configuración por defecto: ${
-                                    e?.message ?? 'error de lectura'
-                                }`,
-                            },
-                            ...get().history,
-                        ],
                     });
                 }
             },
@@ -342,14 +322,15 @@ export const useShopStore = create<ShopState>()(
                                 id: crypto.randomUUID(),
                                 ts: new Date().toISOString(),
                                 type: 'refresh',
-                                message: `Región activa: ${targetRegion}${
-                                    isNewRegionName ? ' (establecida)' : ''
-                                }. Grupo ${groupStart}-${groupEnd} sincronizado.`,
+                                message: `Región activa: ${targetRegion}`,
                             },
                             ...st.history,
                         ],
                     };
                 });
+                console.log(
+                    `Aplicada región ${targetRegion} con grupos ${groupStart}-${groupEnd} sincronizados`
+                );
             },
 
             // ================= Refresh manual =================
@@ -396,9 +377,11 @@ export const useShopStore = create<ShopState>()(
                         ...st.shopByIndex,
                         [shopIdx]: shop,
                     };
+                    let allRegions = [];
                     for (let i = groupStart; i <= groupEnd; i++) {
                         const rk = regionKeyFor(i);
                         nextShopByIndex[rk] = shop;
+                        allRegions.push(st.regions[i]);
                     }
                     return {
                         shop,
@@ -409,7 +392,9 @@ export const useShopStore = create<ShopState>()(
                                 id: crypto.randomUUID(),
                                 ts: new Date().toISOString(),
                                 type: 'refresh',
-                                message: `Tienda regenerada en ${activeRegion} (grupo ${groupStart}-${groupEnd}).`,
+                                message: `Tienda regenerada en ${allRegions.join(
+                                    ', '
+                                )}.`,
                             },
                             ...st.history,
                         ],
@@ -445,8 +430,12 @@ export const useShopStore = create<ShopState>()(
             // ================= Compra =================
             buyAt: (index) => {
                 const s = get();
+                const cfg = s.cfg;
+                if (!cfg) return;
+
                 const slot = s.shop[index];
                 if (!slot || slot.__purchased) return;
+
                 if (s.money < slot.precio) {
                     set((st) => ({
                         history: [
@@ -461,20 +450,19 @@ export const useShopStore = create<ShopState>()(
                     }));
                     return;
                 }
+
+                // snapshot para deshacer
                 set((st) => ({
                     undoStack: [snapshotOf(st), ...st.undoStack].slice(
                         0,
                         UNDO_LIMIT
                     ),
                 }));
-                const newShop = s.shop.slice();
-                newShop[index] = {
-                    ...slot,
-                    __purchased: true,
-                    __exhausted: false,
-                };
+
                 const region = s.regions[s.currentRegionIndex];
                 const shopIdx = s.selectedShopIndex;
+
+                // Registrar compra
                 const purchase: PurchaseItem = {
                     id: crypto.randomUUID(),
                     ts: new Date().toISOString(),
@@ -484,20 +472,76 @@ export const useShopStore = create<ShopState>()(
                     tier: slot.tier,
                     precio: slot.precio,
                 };
-                const groupSize = s.cfg?.shopRefreshEveryRegions ?? 1;
+
+                // Construir nueva tienda según shopBuyAutofill
+                let newShop = s.shop.slice();
+                console.log(cfg.shopBuySlotAutofill)
+                if (cfg.shopBuySlotAutofill) {
+                    // Reglas para buscar candidato del MISMO tier y región
+                    const forbidId = slot.id; // evita que salga el mismo inmediatamente
+                    const purchasedIds = new Set<number>(
+                        s.purchases.map((p) => p.pokemonId)
+                    );
+                    // Si includePurchasedInRerollPool === false, también excluye el recién comprado
+                    if (!cfg.includePurchasedInRerollPool)
+                        purchasedIds.add(slot.id);
+
+                    // usedIds: ids visibles en tienda excepto el propio índice que vamos a reemplazar
+                    const usedIds = new Set<number>();
+                    if (!cfg.allowDuplicates) {
+                        s.shop.forEach((p, i) => {
+                            if (!p || i === index) return;
+                            usedIds.add(p.id);
+                        });
+                    }
+
+                    const cand = findRerollCandidate(
+                        s.data,
+                        region,
+                        slot.tier as Tier,
+                        usedIds,
+                        purchasedIds,
+                        forbidId,
+                        cfg
+                    );
+
+                    if (cand) {
+                        newShop[index] = { ...cand };
+                    } else {
+                        // Sin candidato → hueco
+                        newShop[index] = {
+                            id: -1,
+                            nombre: '—',
+                            tier: slot.tier,
+                            precio: 0,
+                            regiones: [region],
+                        } as any;
+                    }
+                } else {
+                    // Comportamiento actual: marcar como comprado y dejar el hueco "Comprado"
+                    newShop[index] = {
+                        ...slot,
+                        __purchased: true,
+                        __exhausted: false,
+                    };
+                }
+
+                // Sincronizar el grupo (igual que hacías en reroll/refresh)
+                const groupSize = cfg.shopRefreshEveryRegions ?? 1;
                 const groupStart =
                     Math.floor(s.currentRegionIndex / groupSize) * groupSize;
                 const groupEnd = Math.min(
                     groupStart + groupSize - 1,
                     s.regions.length - 1
                 );
+
                 set((st) => {
                     const nextShopByIndex = {
                         ...st.shopByIndex,
                         [shopIdx]: newShop,
                     };
                     for (let i = groupStart; i <= groupEnd; i++) {
-                        nextShopByIndex[regionKeyFor(i)] = newShop;
+                        nextShopByIndex[-(i + 1)] = newShop; // regionKeyFor(i)
                     }
                     return {
                         money: st.money - slot.precio,
@@ -509,7 +553,7 @@ export const useShopStore = create<ShopState>()(
                                 id: crypto.randomUUID(),
                                 ts: new Date().toISOString(),
                                 type: 'buy',
-                                message: `Compra de ${slot.nombre} por ${slot.precio} en ${region}. Slot marcado como 'Comprado'.`,
+                                message: `Compra de ${slot.nombre} por ${slot.precio} en ${region}`,
                             },
                             ...st.history,
                         ],
@@ -618,7 +662,7 @@ export const useShopStore = create<ShopState>()(
                                 type: 'reroll',
                                 message: `Reroll en ${slot.nombre} → ${
                                     cand.nombre
-                                } (tier ${String(slot.tier).toUpperCase()}).`,
+                                } (Tier ${String(slot.tier).toUpperCase()}).`,
                             },
                             ...st.history,
                         ],
@@ -633,18 +677,29 @@ export const useShopStore = create<ShopState>()(
                 if (!top) return;
                 const rest = s.undoStack.slice(1);
                 // Restaurar todo MENOS el historial (debe quedar intacto)
-                set({
-                    currentRegionIndex: top.currentRegionIndex,
-                    selectedRegionIndex: top.selectedRegionIndex,
-                    shop: top.shop,
-                    shopByIndex: top.shopByIndex,
-                    visitedRegions: Array.from(
-                        new Set([...(get().visitedRegions || [])])
-                    ),
-                    rerollsUsedGlobal: get().rerollsUsedGlobal,
-                    money: top.money,
-                    purchases: top.purchases,
-                    undoStack: rest,
+                set((st) => {
+                    return {
+                        currentRegionIndex: top.currentRegionIndex,
+                        selectedRegionIndex: top.selectedRegionIndex,
+                        shop: top.shop,
+                        shopByIndex: top.shopByIndex,
+                        visitedRegions: Array.from(
+                            new Set([...(get().visitedRegions || [])])
+                        ),
+                        rerollsUsedGlobal: top.rerollsUsedGlobal,
+                        money: top.money,
+                        purchases: top.purchases,
+                        undoStack: rest,
+                        history: [
+                            {
+                                id: crypto.randomUUID(),
+                                ts: new Date().toISOString(),
+                                type: 'undo',
+                                message: `Última acción deshecha.`,
+                            },
+                            ...st.history,
+                        ],
+                    };
                 });
             },
 

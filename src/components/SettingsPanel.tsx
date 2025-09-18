@@ -90,7 +90,7 @@ export default function SettingsPanel() {
                             </strong>
                         </div>
                         <div>
-                            Reset de rerolls al Actualizar:{' '}
+                            Resetear rerolls al actualizar:{' '}
                             <strong>
                                 {cfg?.rerollResetOnRefresh ? 'Sí' : 'No'}
                             </strong>
@@ -110,6 +110,12 @@ export default function SettingsPanel() {
                                 {cfg?.includePurchasedInRerollPool
                                     ? 'Sí'
                                     : 'No'}
+                            </strong>
+                        </div>
+                        <div>
+                            Autorrellenar al comprar:{' '}
+                            <strong>
+                                {cfg?.shopBuySlotAutofill ? 'Sí' : 'No'}
                             </strong>
                         </div>
                     </div>
