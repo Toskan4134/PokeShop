@@ -102,7 +102,7 @@ Desde la aplicación puedes abrirla en **Ajustes → Abrir carpeta de configurac
 
 Campos soportados:
 
-```json
+```js
 {
     "shopSize": 10, // tamaño de la tienda
     "quota": { "S": 1, "A": 1, "B": 1, "C": 2 }, // mínimos garantizados por tier
