@@ -1,5 +1,6 @@
 import { useShopStore } from '../store/useShopStore';
 import type { ShopPokemon } from '../types';
+import SpriteImg from './SpriteImg';
 
 function useTierColor(tier: string): string {
     const cfg = useShopStore((s) => s.cfg);
@@ -33,6 +34,7 @@ export default function PokemonRow({
                 className='card p-3 flex items-center gap-2 text-neutral-100'
                 style={{ borderColor }}
             >
+                <SpriteImg id={-1} size={40} />
                 <div className='flex-1 italic opacity-80'>
                     No hay pokémon de este tier disponibles
                 </div>
@@ -49,9 +51,14 @@ export default function PokemonRow({
 
     return (
         <div
-            className='card p-3 flex items-center gap-2 text-neutral-100 border-2'
+            className='card p-3 flex items-center gap-2 text-neutral-100'
             style={{ borderColor }}
         >
+            {isPurchased || p == null ? (
+                <SpriteImg id={-1} size={40} />
+            ) : (
+                <SpriteImg id={p.id} size={40} alt={p.nombre} />
+            )}
             <div className='flex-1 truncate'>
                 {isExhausted ? (
                     <span className='italic opacity-80'>
@@ -67,7 +74,7 @@ export default function PokemonRow({
                 )}
             </div>
             <div className='opacity-80 w-24'>
-                {isPurchased || isExhausted ? '—' : p.precio}
+                {isPurchased || isExhausted ? '—' : p.precio + '$'}
             </div>
             <button
                 className='btn'

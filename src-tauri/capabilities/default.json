@@ -16,6 +16,18 @@
         {
             "identifier": "opener:allow-open-path",
             "allow": [{ "path": "$DATA/**" }]
+        },
+        {
+            "identifier": "fs:allow-exists",
+            "allow": [{ "path": "$APPCONFIG/**" }]
+        },
+        {
+            "identifier": "fs:allow-read-file",
+            "allow": [{ "path": "$APPCONFIG/**" }]
+        },
+        {
+            "identifier": "fs:allow-mkdir",
+            "allow": [{ "path": "$APPCONFIG/**" }]
         }
     ]
 }

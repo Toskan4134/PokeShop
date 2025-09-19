@@ -7,6 +7,7 @@ import {
 } from '@tauri-apps/plugin-fs';
 import { openPath } from '@tauri-apps/plugin-opener';
 import type { AppConfig, Pokemon } from '../types';
+import { ensureSpritesDir } from './sprites';
 
 export const DEFAULT_CONFIG: AppConfig = {
     shopSize: 10,
@@ -96,6 +97,7 @@ export async function ensureConfigFiles(): Promise<{
         );
     if (!(await exists(dataPath)))
         await writeTextFile(dataPath, JSON.stringify(DEFAULT_POKEMON, null, 2));
+    await ensureSpritesDir();
     return { configPath, dataPath, dir };
 }
 

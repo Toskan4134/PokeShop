@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { openConfigFolder } from '../lib/config';
+import { openSpritesFolder } from '../lib/sprites';
 import { useShopStore } from '../store/useShopStore';
 
 export default function SettingsPanel() {
@@ -69,6 +70,14 @@ export default function SettingsPanel() {
                             }}
                         >
                             Abrir carpeta de configuración
+                        </button>
+                        <button
+                            className='btn w-full'
+                            onClick={async () => {
+                                await openSpritesFolder();
+                            }}
+                        >
+                            Abrir carpeta de sprites
                         </button>
                     </div>
 

@@ -14,13 +14,13 @@ Incluye soporte de sprites por defecto (1–1000) y sprites personalizados en un
 -   [Configuración (config.json)](#configuración-configjson)
 -   [Datos de Pokémon (pokemon.json)](#datos-de-pokémon-pokemonjson)
 -   [Sprites](#sprites)
-    - [Ruta por defecto](#ruta-por-defecto)
-    - [Sprites personalizados y sobreescritura](#sprites-personalizados-sobrescritura)
-- [Distribución por porcentajes (tierWeights)](#distribución-por-porcentajes-tierweights)
-- [Reglas de tienda y rerolls](#reglas-de-tienda-y-rerolls)
-- [Historial y Deshacer](#historial-y-deshacer)
-- [Consejos y resolución de problemas](#consejos-y-resolución-de-problemas)
-- [Licencia](LICENSE)
+    -   [Ruta por defecto](#ruta-por-defecto)
+    -   [Sprites personalizados y sobreescritura](#sprites-personalizados-sobrescritura)
+-   [Distribución por porcentajes (tierWeights)](#distribución-por-porcentajes-tierweights)
+-   [Reglas de tienda y rerolls](#reglas-de-tienda-y-rerolls)
+-   [Historial y Deshacer](#historial-y-deshacer)
+-   [Consejos y resolución de problemas](#consejos-y-resolución-de-problemas)
+-   [Licencia](LICENSE)
 
 ## Características
 
@@ -183,8 +183,13 @@ Estructura:
 ```
 
 -   `id`: número único (coincide con el nombre del sprite id.png)
+-   `nombre`: Nombre del pokémon
 -   `tier`: “S” > “A” > … > “Z”
+-   `precio`: Precio del pokémon en la tienda
 -   `regiones`: una o varias
+
+> [!NOTE]  
+> Por defecto hay una lista de pokémon con **información aleatoria** como ejemplo, no están todos los pokémon ni sus regiones correspondientes.
 
 ## Sprites
 
@@ -200,7 +205,7 @@ public/sprites-default/empty.png     # para huecos (slots -1)
 
 ### Sprites personalizados (sobrescritura)
 
-En la carpeta de configuración, la app crea (o puedes crear) una subcarpeta:
+En la carpeta de configuración, la app crea una subcarpeta `sprites`, donde puedes poner tus sprites personalizados:
 
 ```bash
 <appConfigDir>/sprites/
@@ -212,6 +217,9 @@ En la carpeta de configuración, la app crea (o puedes crear) una subcarpeta:
 
 Si existe `sprites/{id}.png`, sobrescribe al de `public/sprites-default/{id}.png`.
 Puedes abrir esta carpeta desde **Ajustes → Abrir carpeta de sprites**.
+
+> [!TIP]
+> Para comprobar que se ha actualizado solamente tienes que hacer F5 en la aplicación
 
 ## Distribución por porcentajes (tierWeights)
 
