@@ -7,123 +7,556 @@
         "regiones": ["Kanto"]
     },
     {
-        "id": 2,
+        "id": 4,
         "nombre": "Charmander",
         "tier": "C",
         "precio": 220,
         "regiones": ["Kanto"]
     },
     {
-        "id": 3,
+        "id": 7,
         "nombre": "Squirtle",
         "tier": "C",
         "precio": 210,
         "regiones": ["Kanto"]
     },
     {
-        "id": 4,
-        "nombre": "Pidgey",
-        "tier": "C",
-        "precio": 90,
-        "regiones": ["Kanto"]
-    },
-    {
-        "id": 5,
+        "id": 25,
         "nombre": "Pikachu",
         "tier": "B",
         "precio": 500,
-        "regiones": ["Kanto"]
+        "regiones": ["Kanto", "Johto", "Hoenn", "Sinnoh"]
     },
     {
-        "id": 6,
-        "nombre": "Nidoran♂",
+        "id": 26,
+        "nombre": "Raichu",
         "tier": "B",
-        "precio": 320,
-        "regiones": ["Kanto"]
+        "precio": 550,
+        "regiones": ["Kanto", "Johto", "Hoenn", "Sinnoh"]
     },
     {
-        "id": 7,
-        "nombre": "Vulpix",
-        "tier": "B",
-        "precio": 350,
-        "regiones": ["Kanto", "Alola"]
+        "id": 38,
+        "nombre": "Ninetales",
+        "tier": "A",
+        "precio": 1000,
+        "regiones": ["Kanto", "Johto"]
     },
     {
-        "id": 8,
+        "id": 59,
         "nombre": "Arcanine",
         "tier": "A",
         "precio": 1200,
-        "regiones": ["Kanto"]
+        "regiones": ["Kanto", "Johto", "Sinnoh"]
     },
     {
-        "id": 9,
-        "nombre": "Gengar",
+        "id": 65,
+        "nombre": "Alakazam",
         "tier": "A",
         "precio": 1300,
-        "regiones": ["Kanto"]
+        "regiones": ["Kanto", "Johto", "Sinnoh"]
     },
     {
-        "id": 10,
+        "id": 94,
+        "nombre": "Gengar",
+        "tier": "A",
+        "precio": 1400,
+        "regiones": ["Kanto", "Johto", "Sinnoh"]
+    },
+    {
+        "id": 149,
+        "nombre": "Dragonite",
+        "tier": "S",
+        "precio": 4800,
+        "regiones": ["Kanto", "Johto", "Sinnoh"]
+    },
+    {
+        "id": 150,
         "nombre": "Mewtwo",
         "tier": "S",
         "precio": 5000,
         "regiones": ["Kanto"]
     },
-
     {
-        "id": 101,
+        "id": 151,
+        "nombre": "Mew",
+        "tier": "S",
+        "precio": 5200,
+        "regiones": ["Kanto"]
+    },
+    {
+        "id": 68,
+        "nombre": "Machamp",
+        "tier": "B",
+        "precio": 700,
+        "regiones": ["Kanto", "Johto", "Sinnoh"]
+    },
+    {
+        "id": 131,
+        "nombre": "Lapras",
+        "tier": "A",
+        "precio": 1500,
+        "regiones": ["Kanto", "Johto", "Sinnoh"]
+    },
+    {
+        "id": 130,
+        "nombre": "Gyarados",
+        "tier": "A",
+        "precio": 1600,
+        "regiones": ["Kanto", "Johto", "Sinnoh"]
+    },
+    {
+        "id": 143,
+        "nombre": "Snorlax",
+        "tier": "A",
+        "precio": 1700,
+        "regiones": ["Kanto", "Johto", "Sinnoh"]
+    },
+    {
+        "id": 74,
+        "nombre": "Geodude",
+        "tier": "C",
+        "precio": 600,
+        "regiones": ["Kanto", "Johto", "Sinnoh"]
+    },
+    {
+        "id": 123,
+        "nombre": "Scyther",
+        "tier": "A",
+        "precio": 750,
+        "regiones": ["Kanto", "Johto", "Sinnoh"]
+    },
+    {
+        "id": 135,
+        "nombre": "Jolteon",
+        "tier": "A",
+        "precio": 1300,
+        "regiones": ["Kanto", "Johto", "Sinnoh"]
+    },
+    {
+        "id": 134,
+        "nombre": "Vaporeon",
+        "tier": "A",
+        "precio": 1300,
+        "regiones": ["Kanto", "Johto", "Sinnoh"]
+    },
+    {
+        "id": 152,
         "nombre": "Chikorita",
         "tier": "C",
         "precio": 200,
         "regiones": ["Johto"]
     },
     {
-        "id": 102,
+        "id": 155,
         "nombre": "Cyndaquil",
         "tier": "C",
         "precio": 220,
         "regiones": ["Johto"]
     },
     {
-        "id": 103,
+        "id": 158,
         "nombre": "Totodile",
         "tier": "C",
         "precio": 210,
         "regiones": ["Johto"]
     },
     {
-        "id": 104,
-        "nombre": "Hoothoot",
-        "tier": "C",
-        "precio": 100,
-        "regiones": ["Johto"]
+        "id": 181,
+        "nombre": "Ampharos",
+        "tier": "B",
+        "precio": 650,
+        "regiones": ["Johto", "Sinnoh"]
     },
     {
-        "id": 105,
+        "id": 175,
         "nombre": "Togetic",
         "tier": "B",
         "precio": 600,
+        "regiones": ["Johto", "Sinnoh"]
+    },
+    {
+        "id": 196,
+        "nombre": "Espeon",
+        "tier": "A",
+        "precio": 1300,
+        "regiones": ["Johto", "Sinnoh"]
+    },
+    {
+        "id": 197,
+        "nombre": "Umbreon",
+        "tier": "A",
+        "precio": 1300,
+        "regiones": ["Johto", "Sinnoh"]
+    },
+    {
+        "id": 229,
+        "nombre": "Houndoom",
+        "tier": "A",
+        "precio": 1400,
+        "regiones": ["Johto", "Sinnoh"]
+    },
+    {
+        "id": 248,
+        "nombre": "Tyranitar",
+        "tier": "S",
+        "precio": 5200,
+        "regiones": ["Johto", "Sinnoh"]
+    },
+    {
+        "id": 249,
+        "nombre": "Lugia",
+        "tier": "S",
+        "precio": 5000,
         "regiones": ["Johto"]
     },
     {
-        "id": 106,
-        "nombre": "Ampharos",
+        "id": 250,
+        "nombre": "Ho-Oh",
+        "tier": "S",
+        "precio": 5000,
+        "regiones": ["Johto"]
+    },
+    {
+        "id": 212,
+        "nombre": "Scizor",
+        "tier": "A",
+        "precio": 1500,
+        "regiones": ["Johto", "Sinnoh"]
+    },
+    {
+        "id": 214,
+        "nombre": "Heracross",
+        "tier": "B",
+        "precio": 700,
+        "regiones": ["Johto", "Sinnoh"]
+    },
+    {
+        "id": 230,
+        "nombre": "Kingdra",
+        "tier": "A",
+        "precio": 1400,
+        "regiones": ["Johto", "Sinnoh"]
+    },
+    {
+        "id": 232,
+        "nombre": "Donphan",
+        "tier": "B",
+        "precio": 750,
+        "regiones": ["Johto", "Sinnoh"]
+    },
+    {
+        "id": 241,
+        "nombre": "Miltank",
         "tier": "B",
         "precio": 650,
         "regiones": ["Johto"]
     },
     {
-        "id": 107,
-        "nombre": "Houndoom",
+        "id": 233,
+        "nombre": "Porygon2",
+        "tier": "B",
+        "precio": 800,
+        "regiones": ["Johto", "Sinnoh"]
+    },
+    {
+        "id": 169,
+        "nombre": "Crobat",
         "tier": "A",
-        "precio": 1400,
+        "precio": 1200,
+        "regiones": ["Johto", "Sinnoh"]
+    },
+    {
+        "id": 208,
+        "nombre": "Steelix",
+        "tier": "A",
+        "precio": 1500,
+        "regiones": ["Johto", "Sinnoh"]
+    },
+    {
+        "id": 244,
+        "nombre": "Entei",
+        "tier": "S",
+        "precio": 4800,
         "regiones": ["Johto"]
     },
     {
-        "id": 108,
-        "nombre": "Tyranitar",
+        "id": 252,
+        "nombre": "Treecko",
+        "tier": "C",
+        "precio": 200,
+        "regiones": ["Hoenn"]
+    },
+    {
+        "id": 255,
+        "nombre": "Torchic",
+        "tier": "C",
+        "precio": 220,
+        "regiones": ["Hoenn"]
+    },
+    {
+        "id": 258,
+        "nombre": "Mudkip",
+        "tier": "C",
+        "precio": 210,
+        "regiones": ["Hoenn"]
+    },
+    {
+        "id": 282,
+        "nombre": "Gardevoir",
+        "tier": "A",
+        "precio": 1400,
+        "regiones": ["Hoenn", "Sinnoh"]
+    },
+    {
+        "id": 286,
+        "nombre": "Breloom",
+        "tier": "B",
+        "precio": 700,
+        "regiones": ["Hoenn", "Sinnoh"]
+    },
+    {
+        "id": 306,
+        "nombre": "Aggron",
+        "tier": "A",
+        "precio": 1500,
+        "regiones": ["Hoenn", "Sinnoh"]
+    },
+    {
+        "id": 376,
+        "nombre": "Metagross",
+        "tier": "S",
+        "precio": 5000,
+        "regiones": ["Hoenn", "Sinnoh"]
+    },
+    {
+        "id": 373,
+        "nombre": "Salamence",
+        "tier": "S",
+        "precio": 4800,
+        "regiones": ["Hoenn", "Sinnoh"]
+    },
+    {
+        "id": 330,
+        "nombre": "Flygon",
+        "tier": "A",
+        "precio": 1600,
+        "regiones": ["Hoenn", "Sinnoh"]
+    },
+    {
+        "id": 350,
+        "nombre": "Milotic",
+        "tier": "A",
+        "precio": 1700,
+        "regiones": ["Hoenn", "Sinnoh"]
+    },
+    {
+        "id": 359,
+        "nombre": "Absol",
+        "tier": "B",
+        "precio": 800,
+        "regiones": ["Hoenn", "Sinnoh"]
+    },
+    {
+        "id": 310,
+        "nombre": "Manectric",
+        "tier": "B",
+        "precio": 750,
+        "regiones": ["Hoenn", "Sinnoh"]
+    },
+    {
+        "id": 272,
+        "nombre": "Ludicolo",
+        "tier": "B",
+        "precio": 700,
+        "regiones": ["Hoenn"]
+    },
+    {
+        "id": 365,
+        "nombre": "Walrein",
+        "tier": "B",
+        "precio": 700,
+        "regiones": ["Hoenn", "Sinnoh"]
+    },
+    {
+        "id": 263,
+        "nombre": "Zangoose",
+        "tier": "C",
+        "precio": 650,
+        "regiones": ["Hoenn"]
+    },
+    {
+        "id": 336,
+        "nombre": "Seviper",
+        "tier": "B",
+        "precio": 650,
+        "regiones": ["Hoenn"]
+    },
+    {
+        "id": 378,
+        "nombre": "Regice",
+        "tier": "S",
+        "precio": 4500,
+        "regiones": ["Hoenn", "Sinnoh"]
+    },
+    {
+        "id": 379,
+        "nombre": "Registeel",
+        "tier": "S",
+        "precio": 4500,
+        "regiones": ["Hoenn", "Sinnoh"]
+    },
+    {
+        "id": 382,
+        "nombre": "Kyogre",
         "tier": "S",
         "precio": 5200,
-        "regiones": ["Johto"]
+        "regiones": ["Hoenn"]
+    },
+    {
+        "id": 383,
+        "nombre": "Groudon",
+        "tier": "S",
+        "precio": 5200,
+        "regiones": ["Hoenn"]
+    },
+    {
+        "id": 387,
+        "nombre": "Turtwig",
+        "tier": "C",
+        "precio": 200,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 390,
+        "nombre": "Chimchar",
+        "tier": "C",
+        "precio": 220,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 393,
+        "nombre": "Piplup",
+        "tier": "C",
+        "precio": 210,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 398,
+        "nombre": "Staraptor",
+        "tier": "B",
+        "precio": 650,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 405,
+        "nombre": "Luxray",
+        "tier": "B",
+        "precio": 700,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 407,
+        "nombre": "Roserade",
+        "tier": "B",
+        "precio": 750,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 445,
+        "nombre": "Garchomp",
+        "tier": "S",
+        "precio": 5000,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 448,
+        "nombre": "Lucario",
+        "tier": "A",
+        "precio": 1500,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 468,
+        "nombre": "Togekiss",
+        "tier": "A",
+        "precio": 1400,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 442,
+        "nombre": "Spiritomb",
+        "tier": "B",
+        "precio": 800,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 473,
+        "nombre": "Mamoswine",
+        "tier": "A",
+        "precio": 1500,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 461,
+        "nombre": "Weavile",
+        "tier": "A",
+        "precio": 1400,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 475,
+        "nombre": "Gallade",
+        "tier": "A",
+        "precio": 1400,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 472,
+        "nombre": "Gliscor",
+        "tier": "B",
+        "precio": 800,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 466,
+        "nombre": "Electivire",
+        "tier": "A",
+        "precio": 1500,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 467,
+        "nombre": "Magmortar",
+        "tier": "A",
+        "precio": 1500,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 491,
+        "nombre": "Darkrai",
+        "tier": "S",
+        "precio": 4800,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 493,
+        "nombre": "Arceus",
+        "tier": "S",
+        "precio": 4800,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 483,
+        "nombre": "Dialga",
+        "tier": "S",
+        "precio": 5200,
+        "regiones": ["Sinnoh"]
+    },
+    {
+        "id": 484,
+        "nombre": "Palkia",
+        "tier": "S",
+        "precio": 5200,
+        "regiones": ["Sinnoh"]
     }
 ]

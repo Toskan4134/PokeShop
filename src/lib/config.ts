@@ -9,59 +9,20 @@ import { openPath } from '@tauri-apps/plugin-opener';
 import type { AppConfig, Pokemon } from '../types';
 import { ensureSpritesDir } from './sprites';
 
-export const DEFAULT_CONFIG: AppConfig = {
-    shopSize: 10,
-    quota: { S: 1, A: 1, B: 1, C: 2 },
-    tierWeights: { C: 40, B: 30, A: 20, S: 10 },
-    regionsOrder: ['Kanto', 'Johto'],
-    rerollsPerRegion: 2,
-    rerollRechargeEveryRegions: 1, // recargar rerolls en cada cambio de región
-    shopRefreshEveryRegions: 1, // regenerar tienda en cada cambio de región
-    rerollResetOnRefresh: true,
-    allowDuplicates: false,
-    dataFile: 'pokemon.json',
-    tierColors: { S: '#f59e0b', A: '#a855f7', B: '#3b82f6', C: '#22c55e' },
-    defaultTierColor: '#9ca3af',
-    includePurchasedInRerollPool: false,
-    shopBuySlotAutofill: false,
-};
+import defaultConfigJson from '../data/config.json';
+import defaultPokemonJson from '../data/pokemon.json';
 
-export const DEFAULT_POKEMON: Pokemon[] = [
-    { id: 1, nombre: 'Bulbasaur', tier: 'C', precio: 200, regiones: ['Kanto'] },
-    {
-        id: 2,
-        nombre: 'Charmander',
-        tier: 'C',
-        precio: 220,
-        regiones: ['Kanto'],
-    },
-    { id: 3, nombre: 'Squirtle', tier: 'C', precio: 210, regiones: ['Kanto'] },
-    { id: 5, nombre: 'Pikachu', tier: 'B', precio: 500, regiones: ['Kanto'] },
-    { id: 8, nombre: 'Arcanine', tier: 'A', precio: 1200, regiones: ['Kanto'] },
-    { id: 10, nombre: 'Mewtwo', tier: 'S', precio: 5000, regiones: ['Kanto'] },
-    {
-        id: 101,
-        nombre: 'Chikorita',
-        tier: 'C',
-        precio: 200,
-        regiones: ['Johto'],
-    },
-    { id: 105, nombre: 'Togetic', tier: 'B', precio: 600, regiones: ['Johto'] },
-    {
-        id: 107,
-        nombre: 'Houndoom',
-        tier: 'A',
-        precio: 1400,
-        regiones: ['Johto'],
-    },
-    {
-        id: 108,
-        nombre: 'Tyranitar',
-        tier: 'S',
-        precio: 5200,
-        regiones: ['Johto'],
-    },
-];
+function unwrapJson<T>(modOrObj: any): T {
+    if (modOrObj && typeof modOrObj === 'object' && 'default' in modOrObj) {
+        return modOrObj.default as T;
+    }
+    return modOrObj as T;
+}
+
+export const DEFAULT_CONFIG: AppConfig =
+    unwrapJson<AppConfig>(defaultConfigJson);
+export const DEFAULT_POKEMON: Pokemon[] =
+    unwrapJson<Pokemon[]>(defaultPokemonJson);
 
 const isTauri =
     typeof window !== 'undefined' &&
@@ -81,6 +42,32 @@ function mergeConfigDefaults(cfg: Partial<AppConfig> | undefined): AppConfig {
     };
 }
 
+async function readAndUnwrapConfigFile(
+    configPath: string,
+    rewrite = false
+): Promise<AppConfig> {
+    const raw = await readTextFile(configPath);
+    let parsed: any;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        // Si el archivo está corrupto, reemplaza por DEFAULT
+        return DEFAULT_CONFIG;
+    }
+
+    const unwrapped = unwrapJson<AppConfig>(parsed);
+    if (
+        rewrite &&
+        parsed &&
+        typeof parsed === 'object' &&
+        'default' in parsed
+    ) {
+        // Repara el archivo sobre disco (opcional)
+        await writeTextFile(configPath, JSON.stringify(unwrapped, null, 2));
+    }
+    return mergeConfigDefaults(unwrapped);
+}
+
 export async function ensureConfigFiles(): Promise<{
     configPath: string;
     dataPath: string;
@@ -88,15 +75,30 @@ export async function ensureConfigFiles(): Promise<{
 }> {
     const dir = await appConfigDir();
     if (!(await exists(dir))) await mkdir(dir, { recursive: true });
+
     const configPath = await join(dir, 'config.json');
     const dataPath = await join(dir, DEFAULT_CONFIG.dataFile);
-    if (!(await exists(configPath)))
+
+    if (!(await exists(configPath))) {
         await writeTextFile(
             configPath,
             JSON.stringify(DEFAULT_CONFIG, null, 2)
         );
-    if (!(await exists(dataPath)))
+    } else {
+        const raw = await readTextFile(configPath);
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object' && 'default' in parsed) {
+                const fixed = unwrapJson<AppConfig>(parsed);
+                await writeTextFile(configPath, JSON.stringify(fixed, null, 2));
+            }
+        } catch {}
+    }
+
+    if (!(await exists(dataPath))) {
         await writeTextFile(dataPath, JSON.stringify(DEFAULT_POKEMON, null, 2));
+    }
+
     await ensureSpritesDir();
     return { configPath, dataPath, dir };
 }
@@ -105,31 +107,40 @@ export async function loadConfig(): Promise<AppConfig> {
     if (!isTauri) {
         try {
             const res = await fetch('/config.json');
-            return res.ok
-                ? mergeConfigDefaults((await res.json()) as AppConfig)
-                : DEFAULT_CONFIG;
+            if (res.ok) {
+                const json = await res.json();
+                return mergeConfigDefaults(unwrapJson<AppConfig>(json));
+            }
+            return DEFAULT_CONFIG;
         } catch {
             return DEFAULT_CONFIG;
         }
     }
     const { configPath } = await ensureConfigFiles();
-    const raw = await readTextFile(configPath);
-    return mergeConfigDefaults(JSON.parse(raw) as AppConfig);
+    return readAndUnwrapConfigFile(configPath, true);
 }
 
 export async function loadPokemonData(cfg: AppConfig): Promise<Pokemon[]> {
     if (!isTauri) {
         try {
             const res = await fetch('/pokemon.json');
-            return res.ok ? ((await res.json()) as Pokemon[]) : DEFAULT_POKEMON;
+            if (res.ok) {
+                const json = await res.json();
+                return unwrapJson<Pokemon[]>(json);
+            }
+            return DEFAULT_POKEMON;
         } catch {
             return DEFAULT_POKEMON;
         }
     }
     const { dir } = await ensureConfigFiles();
     const p = await join(dir, cfg.dataFile);
-    const raw = await readTextFile(p);
-    return JSON.parse(raw) as Pokemon[];
+    try {
+        const raw = await readTextFile(p);
+        return JSON.parse(raw) as Pokemon[];
+    } catch {
+        return DEFAULT_POKEMON;
+    }
 }
 
 export async function openConfigFolder(): Promise<void> {
