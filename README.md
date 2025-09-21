@@ -18,12 +18,14 @@ Incluye soporte de sprites por defecto (1–1000) y sprites personalizados en un
     -   [Sprites personalizados y sobreescritura](#sprites-personalizados-sobrescritura)
 -   [Distribución por porcentajes (tierWeights)](#distribución-por-porcentajes-tierweights)
 -   [Reglas de tienda y rerolls](#reglas-de-tienda-y-rerolls)
+-   [Gestión de perfiles](#gestión-de-perfiles)
 -   [Historial y Deshacer](#historial-y-deshacer)
 -   [Consejos y resolución de problemas](#consejos-y-resolución-de-problemas)
 -   [Licencia](LICENSE)
 
 ## Características
 
+-   **Gestión de perfiles**: sistema completo de perfiles con archivos .sav independientes para cada perfil.
 -   **Tienda por región** con tamaño configurable (por defecto 10).
 -   **Cuotas mínimas por tier** (S, A, B, C…): garantizan unidades mínimas.
 -   **Porcentajes por tier** para rellenar el resto de la tienda (p. ej. C 40%, B 30%, A 20%, S 10%).
@@ -40,7 +42,7 @@ Incluye soporte de sprites por defecto (1–1000) y sprites personalizados en un
 -   **Tauri** (bundle nativo: .exe, .msi, .app, .deb, …)
 -   **React** + **Vite**
 -   **Tailwind CSS v4**
--   **Zustand** (estado global con persistencia)
+-   **Zustand** (estado global con persistencia en archivos .sav)
 -   **TypeScript**
 
 ## Requisitos
@@ -78,6 +80,7 @@ El ejecutable/instalador se genera en `src-tauri/target/release/bundle/…` seg�
 src/
   components/
     TopBar.tsx
+    ProfileManager.tsx # gestión completa de perfiles
     PokemonRow.tsx
     HistoryPanel.tsx
     PurchasesPanel.tsx
@@ -85,11 +88,13 @@ src/
     SpriteImg.tsx # carga sprites (custom o default)
   lib/
     config.ts # lectura/escritura config y datos, abrir carpetas
+    profileManager.ts # gestión de perfiles, detección y operaciones
+    saveManager.ts # manejo de archivos .sav por perfil
     sprites.ts # utilidades sprites (override por carpeta)
     storeLogic.ts # reglas de tienda/rerolls y utilidades
     random.ts
   store/
-    useShopStore.ts # estado global (persistente) con lógica de negocio
+    useShopStore.ts # estado global con persistencia en archivos .sav
   types.ts # tipos compartidos
 public/
   sprites-default/ # sprites por defecto + fallbacks
@@ -257,6 +262,85 @@ La tienda se muestra **ordenada de mejor a peor tier**.
     -   Un Pokémon comprado queda marcado como **Comprado** en su slot. En el caso de que tengas la opción de `shopBuySlotAutofill` se rellena automáticamente.
     -   La lista de **Compras** muestra nombre, tier, precio, región y fecha.
 
+## Gestión de perfiles
+
+La aplicación incluye un sistema completo de gestión de perfiles que permite mantener múltiples partidas independientes:
+
+### Características de perfiles
+
+-   **Perfiles independientes**: Cada perfíl tiene su propio archivo `.sav` con estado completamente separado (dinero, compras, rerolls, regiones visitadas, historial).
+-   **Detección automática**: La aplicación detecta perfiles añadidos manualmente en la carpeta al abrir el menú de perfiles.
+-   **Identificación robusta**: Los perfiles se identifican por ID único almacenado en el archivo `.sav`, no solo por nombre de carpeta.
+-   **Actualización automática**: Si cambias el nombre de una carpeta de perfíl, el perfíl se actualiza automáticamente al nombre de la carpeta.
+
+### Ubicación y estructura
+
+Los perfiles se almacenan en la carpeta de configuración:
+
+```bash
+<appConfigDir>/profiles/
+  default/                # Perfíl predeterminado
+    save.sav
+    config.json
+    pokemon.json
+    sprites/
+  Mi_Perfil_Custom/       # Perfíl personalizado
+    save.sav
+    config.json
+    pokemon.json
+    sprites/
+```
+
+### Operaciones disponibles
+
+-   **Crear perfíl**: Nuevo perfíl vacío o copiando de otro perfíl existente.
+-   **Duplicar perfíl**: Copia completa incluyendo archivos `.sav`, configuración, datos y sprites.
+-   **Renombrar perfíl**: Cambiar el nombre directamente desde la interfaz.
+-   **Eliminar perfíl**: Borrar perfíl completo (no se puede eliminar el perfíl activo).
+-   **Cambiar perfíl**: Intercambiar entre perfiles con carga automática del estado.
+
+### Archivo .sav
+
+Cada perfíl tiene su archivo `save.sav` que contiene:
+
+```json
+{
+  "profileId": "unique-profile-id",
+  "regions": ["Kanto", "Johto", "Hoenn"],
+  "currentRegionIndex": 0,
+  "selectedRegionIndex": 0,
+  "selectedShopIndex": 0,
+  "lastShopIndex": 0,
+  "visitedRegions": ["Kanto"],
+  "shopByIndex": { "0": [...] },
+  "rerollsUsedGlobal": 0,
+  "money": 1000,
+  "history": [...],
+  "purchases": [...],
+  "undoStack": [...],
+  "savedAt": "2024-01-01T12:00:00.000Z"
+}
+```
+
+### Configuración por perfíl
+
+Cada perfíl puede tener su propia configuración personalizada:
+
+-   **config.json**: Configuración específica del perfíl (tamaños de tienda, cuotas, colores, etc.)
+-   **pokemon.json**: Lista de Pokémon personalizada para ese perfíl
+-   **sprites/**: Sprites personalizados que sobrescriben los por defecto
+
+### Detección manual de perfiles
+
+Para añadir un perfíl manualmente:
+
+1. Crea una carpeta en `<appConfigDir>/profiles/`
+2. Añade al menos un archivo `save.sav` válido
+3. Abre el menú de perfiles en la aplicación - se detectará automáticamente
+
+> [!TIP]
+> Los perfiles se mantienen sincronizados incluso si cambias manualmente los nombres de las carpetas
+
 ## Historial y Deshacer
 
 -   **Historial**: Registra compras, rerolls, cambios de región, modificaciones de saldo y acciones deshechas.
@@ -264,11 +348,12 @@ La tienda se muestra **ordenada de mejor a peor tier**.
 
 ## UI / Uso
 
--   **Barra superior**: selección de región, aplicar/actualizar, deshacer, dinero y rerolls.
+-   **Barra superior**: selección de región, aplicar/actualizar, deshacer, dinero, rerolls y **gestión de perfiles**.
+-   **Perfiles**: botón de perfil actual que abre el menú de gestión (crear, duplicar, renombrar, eliminar, cambiar).
 -   **Ajustes**: sumar/restar dinero, abrir carpetas (config/sprites), borrar datos (con confirmación).
 -   **Historial** (acciones) y **Compras** (registro con miniaturas).
 -   **Tienda**: cada fila muestra sprite, nombre, tier, precio, **Comprar** y **Reroll**.
-    -   Si el slot está comprado, se muestra “**Comprado**”.
+    -   Si el slot está comprado, se muestra "**Comprado**".
     -   Si no hay Pokémon disponibles de ese tier, se muestra un mensaje y el slot queda deshabilitado (o aviso temporal al rerollear, según el caso).
 
 ## Consejos y resolución de problemas

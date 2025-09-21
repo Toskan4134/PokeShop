@@ -47,6 +47,73 @@ export async function getProfileDir(profileId: string): Promise<string> {
         return defaultDir;
     }
 
+    // First, try to find the actual folder by scanning for save files with matching profile ID
+    try {
+        const { readDir } = await import('@tauri-apps/plugin-fs');
+        const entries = await readDir(profilesDir);
+
+        for (const entry of entries) {
+            if (entry.isDirectory) {
+                const folderName = entry.name;
+                const saveFilePath = await join(profilesDir, folderName, 'save.sav');
+
+                if (await exists(saveFilePath)) {
+                    try {
+                        const content = await readTextFile(saveFilePath);
+                        const saveData = JSON.parse(content);
+
+                        if (saveData.profileId === profileId) {
+                            const actualDir = await join(profilesDir, folderName);
+                            console.log(`[ProfileManager] Found actual folder for profile ID ${profileId}: ${actualDir}`);
+
+                            // Check if the folder name doesn't match the expected name and update profile if needed
+                            try {
+                                const configDir = await appConfigDir();
+                                const metadataPath = await join(configDir, PROFILES_METADATA_FILE);
+
+                                if (await exists(metadataPath)) {
+                                    const content = await readTextFile(metadataPath);
+                                    const metadata = JSON.parse(content) as ProfileMetadata;
+                                    const profile = metadata.profiles.find(p => p.id === profileId);
+
+                                    if (profile) {
+                                        const expectedFolderName = profileId === DEFAULT_PROFILE_ID ? 'default' : sanitizeProfileName(profile.name);
+
+                                        if (folderName !== expectedFolderName) {
+                                            // Folder name has changed, update the profile name
+                                            const oldProfileName = profile.name;
+                                            const newProfileName = folderName === 'default' ? 'Predeterminado' : folderName.replace(/_/g, ' ');
+                                            profile.name = newProfileName;
+
+                                            await saveProfileMetadata(metadata);
+                                            console.log(`[ProfileManager] Updated profile name from "${oldProfileName}" to "${newProfileName}" due to folder rename`);
+
+                                            // Trigger a custom event to notify UI components
+                                            if (typeof window !== 'undefined') {
+                                                window.dispatchEvent(new CustomEvent('profileUpdated', {
+                                                    detail: { profileId, oldName: oldProfileName, newName: newProfileName }
+                                                }));
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (err) {
+                                console.warn(`[ProfileManager] Error updating profile name during getProfileDir:`, err);
+                            }
+
+                            return actualDir;
+                        }
+                    } catch (err) {
+                        console.warn(`[ProfileManager] Error reading save file in ${folderName}:`, err);
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.warn(`[ProfileManager] Error scanning for actual profile folder:`, err);
+    }
+
+    // Fallback: try to get from metadata (legacy behavior)
     try {
         const configDir = await appConfigDir();
         const metadataPath = await join(configDir, PROFILES_METADATA_FILE);
@@ -58,7 +125,7 @@ export async function getProfileDir(profileId: string): Promise<string> {
 
             if (profile) {
                 const profileDir = await join(profilesDir, sanitizeProfileName(profile.name));
-                console.log(`[ProfileManager] Profile found, using dir: ${profileDir} for profile: ${profile.name}`);
+                console.log(`[ProfileManager] Fallback: using dir based on profile name: ${profileDir} for profile: ${profile.name}`);
                 return profileDir;
             }
         }

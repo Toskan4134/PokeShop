@@ -71,6 +71,18 @@ export default function ProfileManager() {
 
     useEffect(() => {
         loadProfiles();
+
+        // Listen for profile updates from save operations
+        const handleProfileUpdate = (event: CustomEvent) => {
+            console.log(`[ProfileManager UI] Profile updated via save operation:`, event.detail);
+            loadProfiles(); // Refresh the profile list
+        };
+
+        window.addEventListener('profileUpdated', handleProfileUpdate as EventListener);
+
+        return () => {
+            window.removeEventListener('profileUpdated', handleProfileUpdate as EventListener);
+        };
     }, []);
 
     const toggleDropdown = async () => {
