@@ -74,3 +74,26 @@ body::before {
         filter: grayscale(1);
     }
 }
+
+.customScroll {
+    padding-right: 5px;
+}
+.customScroll::-webkit-scrollbar {
+    width: 7px;
+}
+
+.customScroll::-webkit-scrollbar-track {
+    background: #00000088;
+    border-radius: 5px;
+}
+
+.customScroll::-webkit-scrollbar-thumb {
+    background: #505050;
+    border-radius: 5px;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+    .customScroll {
+        scrollbar-color: #505050 #00000088;
+    }
+}

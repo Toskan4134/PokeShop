@@ -11,10 +11,12 @@ export default function App() {
         <div className='min-h-screen bg-neutral-950'>
             <TopBar />
             <main className='container mx-auto max-w-screen-xl p-4 grid gap-4 lg:grid-cols-[1fr_420px]'>
-                <div className='space-y-2'>
-                    {shop.map((p, i) => (
-                        <PokemonRow key={p?.id + '-' + i} p={p} index={i} />
-                    ))}
+                <div className='pr-3 max-h-[755px] text-neutral-100'>
+                    <div className='flex flex-col gap-2 h-full overflow-auto customScroll'>
+                        {shop.map((p, i) => (
+                            <PokemonRow key={p?.id + '-' + i} p={p} index={i} />
+                        ))}
+                    </div>
                 </div>
                 <div className='gap-4 flex lg:flex-col flex-col-reverse'>
                     <HistoryPanel />

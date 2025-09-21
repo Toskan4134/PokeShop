@@ -17,7 +17,6 @@ export default function ProfileManager() {
     const [isOpen, setIsOpen] = useState(false);
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [currentProfileId, setCurrentProfileId] = useState<string>('');
-    const [isLoading, setIsLoading] = useState(true);
     const [newProfileName, setNewProfileName] = useState('');
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [copyFromProfile, setCopyFromProfile] = useState<string>('');
@@ -38,7 +37,6 @@ export default function ProfileManager() {
     const loadProfiles = async () => {
         console.log(`[ProfileManager UI] loadProfiles called`);
         try {
-            setIsLoading(true);
             setError('');
 
             console.log(
@@ -64,8 +62,6 @@ export default function ProfileManager() {
             // Fallback: set empty state to prevent infinite loading
             setProfiles([]);
             setCurrentProfileId('');
-        } finally {
-            setIsLoading(false);
         }
     };
 
@@ -247,14 +243,6 @@ export default function ProfileManager() {
 
     const currentProfile = profiles.find((p) => p.id === currentProfileId);
 
-    // if (isLoading) {
-    //     return (
-    //         <button className='btn-secondary' disabled>
-    //             Cargando...
-    //         </button>
-    //     );
-    // }
-
     const dropdown = isOpen ? (
         <div
             ref={dropdownRef}
@@ -276,7 +264,7 @@ export default function ProfileManager() {
                     </div>
                 )}
 
-                <div className='space-y-2 mb-4'>
+                <div className='space-y-2 mb-4 max-h-72 overflow-y-auto customScroll'>
                     {profiles.map((profile) => (
                         <div
                             key={profile.id}
