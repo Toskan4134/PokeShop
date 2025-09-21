@@ -1,12 +1,13 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import {
     DEFAULT_CONFIG,
     DEFAULT_POKEMON,
     loadConfig,
     loadPokemonData,
 } from '../lib/config';
+import { getCurrentProfile } from '../lib/profileManager';
 import { buildShopForRegion, findRerollCandidate } from '../lib/storeLogic';
+import { loadSaveData, saveSaveData, type SaveData } from '../lib/saveManager';
 import type {
     AppConfig,
     HistoryEvent,
@@ -20,7 +21,7 @@ import type {
 // ===== Configuración interna =====
 const UNDO_LIMIT = 20; // niveles de deshacer
 const FLASH_MS = 2000; // duración del aviso "No hay pokémon ..."
-const STORAGE_KEY = 'pokeshop-state-v12';
+
 
 // Evita solapamientos de temporizadores de "slot agotado"
 // key = `${region}:${index}`
@@ -50,6 +51,7 @@ export type ShopState = {
 
     // acciones
     bootstrap: () => Promise<void>;
+    bootstrapWithProfile: (profileId: string) => Promise<void>;
     selectRegionIndex: (i: number) => void;
     nextSelectedRegion: () => void;
     prevSelectedRegion: () => void;
@@ -60,6 +62,8 @@ export type ShopState = {
     rerollAt: (index: number) => void;
     undoLast: () => void;
     resetAll: () => Promise<void>;
+    refreshForProfileSwitch: (oldProfileId?: string, newProfileId?: string) => Promise<void>;
+    saveCurrentState: () => Promise<void>;
 };
 
 function snapshotOf(s: ShopState): Snapshot {
@@ -77,9 +81,7 @@ function snapshotOf(s: ShopState): Snapshot {
     };
 }
 
-export const useShopStore = create<ShopState>()(
-    persist(
-        (set, get) => ({
+export const useShopStore = create<ShopState>()((set, get) => ({
             cfg: null,
             data: [],
             regions: [],
@@ -98,53 +100,121 @@ export const useShopStore = create<ShopState>()(
 
             // ================= Bootstrap =================
             bootstrap: async () => {
+                console.log(`[Store] Bootstrap started`);
                 try {
+                    console.log(`[Store] Loading config...`);
                     const cfg = await loadConfig();
+                    console.log(`[Store] Config loaded, loading pokemon data...`);
                     const data = await loadPokemonData(cfg);
+                    console.log(`[Store] Loaded ${data.length} pokemon, setting up regions...`);
                     const regions = cfg.regionsOrder.length
                         ? cfg.regionsOrder
                         : ['Kanto'];
-                    const persistedIdx = Math.min(
-                        Math.max(0, get().currentRegionIndex || 0),
-                        regions.length - 1
-                    );
+                    console.log(`[Store] Regions: ${regions.join(', ')}`);
+
+                    // Try to load saved state for current profile
+                    const currentProfileId = await getCurrentProfile();
+                    console.log(`[Store] Looking for saved state for profile: ${currentProfileId}`);
+
+                    const savedState = await loadSaveData();
+                    if (savedState) {
+                        console.log(`[Store] Found saved state for profile: ${currentProfileId}`, savedState);
+                    } else {
+                        console.log(`[Store] No saved state found for profile: ${currentProfileId}`);
+                    }
+
+                    // Use saved state if available, otherwise use defaults
+                    const persistedIdx = savedState
+                        ? Math.min(Math.max(0, savedState.currentRegionIndex || 0), regions.length - 1)
+                        : Math.min(Math.max(0, get().currentRegionIndex || 0), regions.length - 1);
+
                     const region = regions[persistedIdx];
+                    console.log(`[Store] Current region: ${region} (index: ${persistedIdx})`);
                     const shopIdx = Math.floor(
                         persistedIdx / (cfg.shopRefreshEveryRegions ?? 1)
                     );
 
-                    // 1) Intentar snapshot por región
-                    const rk = regionKeyFor(persistedIdx);
-                    const existingRegionShop = get().shopByIndex[rk];
+                    // 1) Use saved state if available
+                    let shop: ShopPokemon[];
+                    let shopByIndex: Record<number, ShopPokemon[]>;
+                    let visitedRegions: string[];
+                    let money: number;
+                    let purchases: PurchaseItem[];
+                    let history: HistoryEvent[];
+                    let undoStack: Snapshot[];
+                    let rerollsUsedGlobal: number;
 
-                    // 2) Si no hay snapshot por región, intentar canónica por grupo
-                    const existingGroupShop = get().shopByIndex[shopIdx];
+                    if (savedState) {
+                        console.log(`[Store] Using saved state for bootstrap`);
+                        shopByIndex = savedState.shopByIndex || {};
+                        visitedRegions = savedState.visitedRegions || [region];
+                        money = savedState.money || 0;
+                        purchases = savedState.purchases || [];
+                        history = savedState.history || [];
+                        undoStack = savedState.undoStack || [];
+                        rerollsUsedGlobal = savedState.rerollsUsedGlobal || 0;
 
-                    const purchasedIds = new Set<number>(
-                        get().purchases.map((p) => p.pokemonId)
-                    );
+                        // Reconstruct shop based on current region, not saved shop
+                        const rk = regionKeyFor(persistedIdx);
+                        const existingRegionShop = shopByIndex[rk];
+                        const existingGroupShop = shopByIndex[shopIdx];
 
-                    const shop =
-                        (existingRegionShop &&
-                            existingRegionShop.length &&
-                            existingRegionShop) ||
-                        (existingGroupShop &&
-                            existingGroupShop.length &&
-                            existingGroupShop) ||
-                        (buildShopForRegion(
-                            data,
-                            region,
-                            cfg,
-                            purchasedIds
-                        ) as ShopPokemon[]);
+                        const purchasedIds = new Set<number>(
+                            purchases.map((p) => p.pokemonId)
+                        );
 
-                    // visited = claves conocidas + región activa
-                    const visitedSet = new Set<string>(
-                        get().visitedRegions ||
-                            Object.keys(get().shopByIndex || {})
-                    );
-                    visitedSet.add(region);
+                        shop =
+                            (existingRegionShop && existingRegionShop.length && existingRegionShop) ||
+                            (existingGroupShop && existingGroupShop.length && existingGroupShop) ||
+                            (buildShopForRegion(data, region, cfg, purchasedIds) as ShopPokemon[]);
+                    } else {
+                        console.log(`[Store] No saved state, creating fresh shop`);
+                        // 1) Intentar snapshot por región
+                        const rk = regionKeyFor(persistedIdx);
+                        const existingRegionShop = get().shopByIndex[rk];
 
+                        // 2) Si no hay snapshot por región, intentar canónica por grupo
+                        const existingGroupShop = get().shopByIndex[shopIdx];
+
+                        const purchasedIds = new Set<number>(
+                            get().purchases.map((p) => p.pokemonId)
+                        );
+
+                        shop =
+                            (existingRegionShop &&
+                                existingRegionShop.length &&
+                                existingRegionShop) ||
+                            (existingGroupShop &&
+                                existingGroupShop.length &&
+                                existingGroupShop) ||
+                            (buildShopForRegion(
+                                data,
+                                region,
+                                cfg,
+                                purchasedIds
+                            ) as ShopPokemon[]);
+
+                        // visited = claves conocidas + región activa
+                        const visitedSet = new Set<string>(
+                            get().visitedRegions ||
+                                Object.keys(get().shopByIndex || {})
+                        );
+                        visitedSet.add(region);
+
+                        shopByIndex = {
+                            ...get().shopByIndex,
+                            [shopIdx]: shop,
+                            [regionKeyFor(persistedIdx)]: shop,
+                        };
+                        visitedRegions = Array.from(visitedSet);
+                        money = get().money || 0;
+                        purchases = get().purchases || [];
+                        history = get().history || [];
+                        undoStack = get().undoStack || [];
+                        rerollsUsedGlobal = get().rerollsUsedGlobal ?? 0;
+                    }
+
+                    console.log(`[Store] Setting up shop with ${shop.length} items`);
                     set({
                         cfg,
                         data,
@@ -152,15 +222,20 @@ export const useShopStore = create<ShopState>()(
                         currentRegionIndex: persistedIdx,
                         selectedRegionIndex: persistedIdx,
                         shop,
-                        shopByIndex: {
-                            ...get().shopByIndex,
-                            [shopIdx]: shop,
-                            [rk]: shop,
-                        },
-                        visitedRegions: Array.from(visitedSet),
-                        rerollsUsedGlobal: get().rerollsUsedGlobal ?? 0,
+                        shopByIndex,
+                        visitedRegions,
+                        rerollsUsedGlobal,
+                        money,
+                        purchases,
+                        history,
+                        undoStack,
                     });
+
+                    // Save initial state
+                    await get().saveCurrentState();
+                    console.log(`[Store] Bootstrap completed successfully`);
                 } catch (e: any) {
+                    console.error(`[Store] Bootstrap failed:`, e);
                     const cfg = DEFAULT_CONFIG;
                     const data = DEFAULT_POKEMON;
                     const regions = cfg.regionsOrder.length
@@ -189,6 +264,130 @@ export const useShopStore = create<ShopState>()(
                         visitedRegions: [region],
                         rerollsUsedGlobal: 0,
                     });
+
+                    // Save state after bootstrap fallback
+                    await get().saveCurrentState();
+                }
+            },
+
+            // ================= Bootstrap with Specific Profile =================
+            bootstrapWithProfile: async (profileId: string) => {
+                console.log(`[Store] Bootstrap with specific profile started: ${profileId}`);
+                try {
+                    console.log(`[Store] Loading config...`);
+                    const cfg = await loadConfig();
+                    console.log(`[Store] Config loaded, loading pokemon data...`);
+                    const data = await loadPokemonData(cfg);
+                    console.log(`[Store] Loaded ${data.length} pokemon, setting up regions...`);
+                    const regions = cfg.regionsOrder.length
+                        ? cfg.regionsOrder
+                        : ['Kanto'];
+                    console.log(`[Store] Regions: ${regions.join(', ')}`);
+
+                    // Load saved state for SPECIFIC profile
+                    console.log(`[Store] Loading saved state for specific profile: ${profileId}`);
+                    const savedState = await loadSaveData(profileId);
+                    if (savedState) {
+                        console.log(`[Store] Found saved state for profile: ${profileId}`, savedState);
+                    } else {
+                        console.log(`[Store] No saved state found for profile: ${profileId}`);
+                    }
+
+                    // Use saved state if available, otherwise use defaults
+                    let currentRegionIndex = 0;
+                    let selectedRegionIndex = 0;
+                    let selectedShopIndex = 0;
+                    let lastShopIndex = 0;
+                    let visitedRegions: string[] = [];
+                    let shop: ShopPokemon[] = [];
+                    let shopByIndex: Record<number, ShopPokemon[]> = {};
+                    let rerollsUsedGlobal = 0;
+                    let money = 0;
+                    let purchases: PurchaseItem[] = [];
+                    let history: HistoryEvent[] = [];
+                    let undoStack: Snapshot[] = [];
+
+                    if (savedState) {
+                        currentRegionIndex = savedState.currentRegionIndex ?? 0;
+                        selectedRegionIndex = savedState.selectedRegionIndex ?? currentRegionIndex;
+                        selectedShopIndex = savedState.selectedShopIndex ?? 0;
+                        lastShopIndex = savedState.lastShopIndex ?? 0;
+                        visitedRegions = savedState.visitedRegions || [];
+                        shopByIndex = savedState.shopByIndex || {};
+                        rerollsUsedGlobal = savedState.rerollsUsedGlobal ?? 0;
+                        money = savedState.money ?? 0;
+                        purchases = savedState.purchases || [];
+                        history = savedState.history || [];
+                        undoStack = savedState.undoStack || [];
+
+                        const persistedIdx = Math.max(0, Math.min(currentRegionIndex, regions.length - 1));
+                        const region = regions[persistedIdx];
+                        const shopIdx = Math.floor(persistedIdx / (cfg.shopRefreshEveryRegions ?? 1));
+
+                        const rk = regionKeyFor(persistedIdx);
+                        const existingRegionShop = shopByIndex[rk];
+                        const existingGroupShop = shopByIndex[shopIdx];
+
+                        const purchasedIds = new Set<number>(purchases.map((p) => p.pokemonId));
+
+                        shop = (existingRegionShop && existingRegionShop.length && existingRegionShop) ||
+                               (existingGroupShop && existingGroupShop.length && existingGroupShop) ||
+                               (buildShopForRegion(data, region, cfg, purchasedIds) as ShopPokemon[]);
+                    } else {
+                        console.log(`[Store] No saved state, creating fresh shop for profile: ${profileId}`);
+                        const region = regions[0];
+                        const purchasedIds = new Set<number>();
+                        shop = buildShopForRegion(data, region, cfg, purchasedIds) as ShopPokemon[];
+                        shopByIndex = { [0]: shop };
+                        visitedRegions = [region];
+                    }
+
+                    console.log(`[Store] Setting up shop with ${shop.length} items for profile: ${profileId}`);
+                    set({
+                        cfg,
+                        data,
+                        regions,
+                        currentRegionIndex,
+                        selectedRegionIndex,
+                        selectedShopIndex,
+                        lastShopIndex,
+                        visitedRegions,
+                        shop,
+                        shopByIndex,
+                        rerollsUsedGlobal,
+                        money,
+                        purchases,
+                        history,
+                        undoStack,
+                    });
+
+                    console.log(`[Store] Bootstrap completed for profile: ${profileId}`);
+                    // Save state after bootstrap
+                    await get().saveCurrentState();
+                } catch (err) {
+                    console.error(`[Store] Bootstrap error for profile ${profileId}:`, err);
+                    // Fallback to fresh state
+                    const region = 'Kanto';
+                    const shop = [] as ShopPokemon[];
+                    set({
+                        cfg: DEFAULT_CONFIG,
+                        data: DEFAULT_POKEMON,
+                        regions: [region],
+                        currentRegionIndex: 0,
+                        selectedRegionIndex: 0,
+                        selectedShopIndex: 0,
+                        lastShopIndex: 0,
+                        shop,
+                        shopByIndex: { [0]: shop },
+                        visitedRegions: [region],
+                        rerollsUsedGlobal: 0,
+                        money: 0,
+                        purchases: [],
+                        history: [],
+                        undoStack: [],
+                    });
+                    // Save state after bootstrap fallback
+                    await get().saveCurrentState();
                 }
             },
 
@@ -204,6 +403,8 @@ export const useShopStore = create<ShopState>()(
                     ),
                 });
                 console.log(i % (s.cfg.shopRefreshEveryRegions ?? 1));
+
+                // Don't save state here - let applySelectedRegionAndRefresh handle it
             },
             nextSelectedRegion: () => {
                 const s = get();
@@ -280,7 +481,7 @@ export const useShopStore = create<ShopState>()(
                     }
                 }
 
-                // --- Rerolls globales (igual que ahora) ---
+                // --- Rerolls logic ---
                 let nextRerollsUsed = s.rerollsUsedGlobal;
                 if (isNewRegionName) {
                     visited.add(targetRegion);
@@ -331,6 +532,9 @@ export const useShopStore = create<ShopState>()(
                 console.log(
                     `Aplicada región ${targetRegion} con grupos ${groupStart}-${groupEnd} sincronizados`
                 );
+
+                // Save state after applying region
+                get().saveCurrentState();
             },
 
             // ================= Refresh manual =================
@@ -400,6 +604,9 @@ export const useShopStore = create<ShopState>()(
                         ],
                     };
                 });
+
+                // Save state after refresh
+                get().saveCurrentState();
             },
 
             // ================= Dinero =================
@@ -425,6 +632,9 @@ export const useShopStore = create<ShopState>()(
                         ...s.history,
                     ],
                 }));
+
+                // Save state after adding money
+                get().saveCurrentState();
             },
 
             // ================= Compra =================
@@ -559,6 +769,9 @@ export const useShopStore = create<ShopState>()(
                         ],
                     };
                 });
+
+                // Save state after purchase
+                get().saveCurrentState();
             },
 
             // ================= Reroll (global) =================
@@ -668,6 +881,9 @@ export const useShopStore = create<ShopState>()(
                         ],
                     };
                 });
+
+                // Save state after reroll
+                get().saveCurrentState();
             },
 
             // ================= Deshacer =================
@@ -701,13 +917,19 @@ export const useShopStore = create<ShopState>()(
                         ],
                     };
                 });
+
+                // Save state after undo
+                get().saveCurrentState();
             },
 
             // ================= Reset =================
             resetAll: async () => {
                 try {
-                    localStorage.removeItem(STORAGE_KEY);
-                } catch {}
+                    const { deleteSaveData } = await import('../lib/saveManager');
+                    await deleteSaveData();
+                } catch (err) {
+                    console.warn(`[Store] Error deleting save file:`, err);
+                }
                 set({
                     cfg: null,
                     data: [],
@@ -732,22 +954,108 @@ export const useShopStore = create<ShopState>()(
                 });
                 await get().bootstrap();
             },
-        }),
-        {
-            name: STORAGE_KEY,
-            partialize: (s) => ({
-                regions: s.regions,
-                currentRegionIndex: s.currentRegionIndex,
-                selectedRegionIndex: s.selectedRegionIndex,
-                visitedRegions: s.visitedRegions,
-                shop: s.shop,
-                shopByIndex: s.shopByIndex,
-                rerollsUsedGlobal: s.rerollsUsedGlobal,
-                money: s.money,
-                history: s.history,
-                purchases: s.purchases,
-                undoStack: s.undoStack,
-            }),
-        }
-    )
-);
+
+            // ================= Profile Switch =================
+            refreshForProfileSwitch: async (oldProfileId?: string, newProfileId?: string) => {
+                console.log(`[Store] Profile switch refresh started`);
+
+                try {
+                    // Save current profile's state to the OLD profile before switching
+                    if (oldProfileId) {
+                        console.log(`[Store] Saving current state to old profile: ${oldProfileId}`);
+                        const state = get();
+                        if (state.cfg) {
+                            const stateToSave = {
+                                regions: state.regions,
+                                currentRegionIndex: state.currentRegionIndex,
+                                selectedRegionIndex: state.selectedRegionIndex,
+                                selectedShopIndex: state.selectedShopIndex,
+                                lastShopIndex: state.lastShopIndex,
+                                visitedRegions: state.visitedRegions,
+                                shopByIndex: state.shopByIndex,
+                                rerollsUsedGlobal: state.rerollsUsedGlobal,
+                                money: state.money,
+                                history: state.history,
+                                purchases: state.purchases,
+                                undoStack: state.undoStack,
+                            };
+                            // Save to the OLD profile with explicit profile ID
+                            await saveSaveData(stateToSave, oldProfileId);
+                        }
+                    } else {
+                        console.log(`[Store] No old profile ID provided, saving to current profile`);
+                        await get().saveCurrentState();
+                    }
+
+                    // Reset state completely for new profile
+                    console.log(`[Store] Resetting store state for new profile`);
+                    set({
+                        cfg: null,
+                        data: [],
+                        regions: [],
+                        currentRegionIndex: 0,
+                        selectedRegionIndex: 0,
+                        selectedShopIndex: 0,
+                        lastShopIndex: 0,
+                        visitedRegions: [],
+                        shop: [],
+                        shopByIndex: {},
+                        rerollsUsedGlobal: 0,
+                        money: 0,
+                        purchases: [],
+                        undoStack: [],
+                        history: [],
+                    });
+
+                    // Force a small delay to ensure state is cleared
+                    console.log(`[Store] Waiting for state reset...`);
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    // Bootstrap with new profile's data
+                    console.log(`[Store] Bootstrapping with new profile data`);
+                    if (newProfileId) {
+                        console.log(`[Store] Explicitly loading save data for new profile: ${newProfileId}`);
+                        await get().bootstrapWithProfile(newProfileId);
+                    } else {
+                        await get().bootstrap();
+                    }
+                    console.log(`[Store] Profile switch completed`);
+                } catch (err) {
+                    console.error(`[Store] Error during profile switch:`, err);
+                    // Fallback: just bootstrap normally
+                    await get().bootstrap();
+                }
+            },
+
+            // ================= Save Current State =================
+            saveCurrentState: async () => {
+                try {
+                    const state = get();
+                    if (!state.cfg) {
+                        console.log(`[Store] No config loaded, skipping save`);
+                        return;
+                    }
+
+                    const stateToSave = {
+                        regions: state.regions,
+                        currentRegionIndex: state.currentRegionIndex,
+                        selectedRegionIndex: state.selectedRegionIndex,
+                        selectedShopIndex: state.selectedShopIndex,
+                        lastShopIndex: state.lastShopIndex,
+                        visitedRegions: state.visitedRegions,
+                        // Don't save shop - it will be reconstructed based on current region
+                        shopByIndex: state.shopByIndex,
+                        rerollsUsedGlobal: state.rerollsUsedGlobal,
+                        money: state.money,
+                        history: state.history,
+                        purchases: state.purchases,
+                        undoStack: state.undoStack,
+                    };
+
+                    // saveSaveData will automatically get current profile and add profileId
+                    await saveSaveData(stateToSave);
+                } catch (err) {
+                    console.error(`[Store] Error saving current state:`, err);
+                }
+            },
+        }));

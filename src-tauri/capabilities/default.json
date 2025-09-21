@@ -26,7 +26,39 @@
             "allow": [{ "path": "$APPCONFIG/**" }]
         },
         {
+            "identifier": "fs:allow-read-text-file",
+            "allow": [{ "path": "$APPCONFIG/**" }]
+        },
+        {
             "identifier": "fs:allow-mkdir",
+            "allow": [{ "path": "$APPCONFIG/**" }]
+        },
+        {
+            "identifier": "fs:allow-write-file",
+            "allow": [{ "path": "$APPCONFIG/**" }]
+        },
+        {
+            "identifier": "fs:allow-write-text-file",
+            "allow": [{ "path": "$APPCONFIG/**" }]
+        },
+        {
+            "identifier": "fs:allow-remove",
+            "allow": [{ "path": "$APPCONFIG/**" }]
+        },
+        {
+            "identifier": "fs:allow-rename",
+            "allow": [{ "path": "$APPCONFIG/**" }]
+        },
+        {
+            "identifier": "fs:allow-copy-file",
+            "allow": [{ "path": "$APPCONFIG/**" }]
+        },
+        {
+            "identifier": "fs:allow-read-dir",
+            "allow": [{ "path": "$APPCONFIG/**" }]
+        },
+        {
+            "identifier": "opener:allow-open-path",
             "allow": [{ "path": "$APPCONFIG/**" }]
         }
     ]

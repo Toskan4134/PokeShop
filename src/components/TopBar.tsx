@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useShopStore } from '../store/useShopStore';
+import ProfileManager from './ProfileManager';
 
 export default function TopBar() {
     const bootstrap = useShopStore((s) => s.bootstrap);
@@ -20,8 +21,11 @@ export default function TopBar() {
     const usedGlobal = useShopStore((s) => s.rerollsUsedGlobal);
 
     useEffect(() => {
-        bootstrap();
-    }, [bootstrap]);
+        // Only bootstrap if the store isn't already initialized (no config)
+        if (!cfg) {
+            bootstrap();
+        }
+    }, [bootstrap, cfg]);
 
     const activeRegion = regions[activeIdx] ?? '';
     const remaining = Math.max(
@@ -86,6 +90,7 @@ export default function TopBar() {
                 <span>
                     Dinero: <strong>{money}</strong>
                 </span>
+                <ProfileManager />
                 <button
                     id='open-settings'
                     className='btn-secondary'

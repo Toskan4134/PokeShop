@@ -9,6 +9,7 @@ export default function SettingsPanel() {
     const addMoney = useShopStore((s) => s.addMoney);
     const cfg = useShopStore((s) => s.cfg);
     const resetAll = useShopStore((s) => s.resetAll);
+    const bootstrap = useShopStore((s) => s.bootstrap);
 
     useEffect(() => {
         const btn = document.getElementById('open-settings');
@@ -79,6 +80,15 @@ export default function SettingsPanel() {
                         >
                             Abrir carpeta de sprites
                         </button>
+                        <button
+                            className='btn-confirm w-full'
+                            onClick={async () => {
+                                await bootstrap();
+                            }}
+                            title='Recargar configuración desde archivos'
+                        >
+                            Sincronizar configuración
+                        </button>
                     </div>
 
                     <div className='text-sm opacity-80 space-y-1'>
@@ -129,8 +139,8 @@ export default function SettingsPanel() {
                         </div>
                     </div>
                     <p className='text-xs opacity-60'>
-                        Edita <code>config.json</code> y pulsa{' '}
-                        <strong>Actualizar</strong>.
+                        Edita <code>config.json</code> o <code>pokemon.json</code> y pulsa{' '}
+                        <strong>Sincronizar configuración</strong>.
                     </p>
                 </div>
             </div>

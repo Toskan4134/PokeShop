@@ -42,7 +42,7 @@ export default function PokemonRow({
                 <button className='btn' disabled>
                     Comprar
                 </button>
-                <button className='btn-secondary' disabled title='Reroll'>
+                <button className='btn-secondary' disabled title='Rerollear'>
                     ⟳
                 </button>
             </div>
@@ -86,7 +86,7 @@ export default function PokemonRow({
             <button
                 className='btn-secondary'
                 onClick={() => rerollAt(index)}
-                title='Reroll'
+                title='Rerollear'
                 disabled={disabledReroll}
             >
                 ⟳
