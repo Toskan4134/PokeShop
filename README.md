@@ -3,6 +3,9 @@
 Aplicación de escritorio para generar una tienda aleatoria de Pokémon por regiones y tiers. Permite compras con moneda ficticia, rerolls limitados y un historial de acciones. Toda la configuración (regiones, cuotas de tiers, tamaños, colores, recarga de rerolls, etc.) es externa y editable por el usuario. Los datos y el estado (dinero, tiendas por región, compras, rerolls, región activa…) persisten entre sesiones.
 Incluye soporte de sprites por defecto (1–1000) y sprites personalizados en una carpeta de configuración que sobrescriben los de serie.
 
+<img width="1267" height="882" alt="image" src="https://github.com/user-attachments/assets/4d4650fc-9f38-4b2d-b1e5-8e31c6a59c10" />
+<img width="1267" height="882" alt="image" src="https://github.com/user-attachments/assets/582ee3ee-683b-41c3-9694-34763a0dbba2" />
+
 ## Tabla de Contenidos
 
 -   [Características](#características)
@@ -36,6 +39,7 @@ Incluye soporte de sprites por defecto (1–1000) y sprites personalizados en un
 -   Deshacer la última acción.
 -   **Sprites**: imágenes por ID con fallback; el usuario puede poner sprites propios que sobrescriben los de serie.
 -   Tema oscuro con estética simple y familiar de Pokémon (borde por color según tier, configurable).
+-   **Gestión de Perfiles**: Para poder crear nuevos perfiles, editarlos y tener varios simultáneamente
 
 ## Stack
 
@@ -298,6 +302,8 @@ Los perfiles se almacenan en la carpeta de configuración:
 -   **Renombrar perfíl**: Cambiar el nombre directamente desde la interfaz.
 -   **Eliminar perfíl**: Borrar perfíl completo (no se puede eliminar el perfíl activo).
 -   **Cambiar perfíl**: Intercambiar entre perfiles con carga automática del estado.
+
+<img width="332" height="411" alt="image" src="https://github.com/user-attachments/assets/2f74de6c-0160-41b9-91e3-18e0c0cb5c39" />
 
 ### Archivo .sav
 
