@@ -1,6 +1,6 @@
 [package]
 name = "PokéShop"
-version = "1.0.3"
+version = "1.0.4"
 description = "PokéShop"
 authors = ["Toskan4134"]
 license = "MIT"
