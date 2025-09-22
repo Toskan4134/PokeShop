@@ -6,7 +6,7 @@ import {
     loadPokemonData,
 } from '../lib/config';
 import { getCurrentProfile } from '../lib/profileManager';
-import { buildShopForRegion, findRerollCandidate } from '../lib/storeLogic';
+import { buildShopForRegion, findRerollCandidate, wouldRerollCauseTierDowngrade } from '../lib/storeLogic';
 import { loadSaveData, saveSaveData, type SaveData } from '../lib/saveManager';
 import type {
     AppConfig,
@@ -658,6 +658,27 @@ export const useShopStore = create<ShopState>()((set, get) => ({
                 const purchasedIds = new Set<number>(
                     s.purchases.map((p) => p.pokemonId)
                 );
+
+                // Verificar si el reroll causaría una degradación de tier
+                const downgradeCheck = wouldRerollCauseTierDowngrade(
+                    s.data,
+                    region,
+                    slot.tier as Tier,
+                    usedIds,
+                    purchasedIds,
+                    forbidId,
+                    s.cfg
+                );
+
+                // Si habría degradación, mostrar confirmación
+                if (downgradeCheck.wouldDowngrade && downgradeCheck.fallbackTier) {
+                    const confirmed = window.confirm(
+                        `El tier se reducirá de ${slot.tier} a ${downgradeCheck.fallbackTier} al rerollear. ¿Continuar?`
+                    );
+                    if (!confirmed) {
+                        return; // Cancelar reroll
+                    }
+                }
 
                 const cand = findRerollCandidate(
                     s.data,

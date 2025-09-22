@@ -20,6 +20,7 @@ Incluye soporte de sprites por defecto (1–1000) y sprites personalizados en un
     -   [Ruta por defecto](#ruta-por-defecto)
     -   [Sprites personalizados y sobreescritura](#sprites-personalizados-sobrescritura)
 -   [Distribución por porcentajes (tierWeights)](#distribución-por-porcentajes-tierweights)
+-   [Sistema de Fallback de Tiers](#sistema-de-fallback-de-tiers)
 -   [Reglas de tienda y rerolls](#reglas-de-tienda-y-rerolls)
 -   [Gestión de perfiles](#gestión-de-perfiles)
 -   [Historial y Deshacer](#historial-y-deshacer)
@@ -38,6 +39,8 @@ Incluye soporte de sprites por defecto (1–1000) y sprites personalizados en un
 -   Historial de compras, rerolls, cambios de región y ajustes de dinero.
 -   Deshacer la última acción.
 -   **Sprites**: imágenes por ID con fallback; el usuario puede poner sprites propios que sobrescriben los de serie.
+-   **Sistema de Fallback de Tiers**: sustitución automática de tiers no disponibles por tiers alternativos (configurable).
+-   **Confirmación de degradación de tier**: aviso al usuario cuando un reroll causaría una reducción de tier.
 -   Tema oscuro con estética simple y familiar de Pokémon (borde por color según tier, configurable).
 -   **Gestión de Perfiles**: Para poder crear nuevos perfiles, editarlos y tener varios simultáneamente
 
@@ -150,7 +153,10 @@ Campos soportados:
     // Si true, los comprados pueden volver a salir en un reroll
     "includePurchasedInRerollPool": false,
     // Si true, la tienda se autofillea al comprar un pokémon
-    "shopBuySlotAutofill": "false"
+    "shopBuySlotAutofill": false,
+
+    // Si true, activa el sistema de fallback de tiers cuando no hay Pokémon disponibles
+    "tierFallback": false
 }
 ```
 
@@ -252,6 +258,84 @@ Ejemplo
    Puede salir **más o menos** de un tier respecto a la cuota mínima.
 
 La tienda se muestra **ordenada de mejor a peor tier**.
+
+## Sistema de Fallback de Tiers
+
+El sistema de fallback de tiers permite que la aplicación automáticamente sustituya Pokémon de tiers no disponibles por Pokémon de tiers alternativos, garantizando que la tienda siempre tenga contenido disponible.
+
+### Configuración
+
+Para activar el sistema de fallback, establece `tierFallback: true` en tu `config.json`:
+
+```json
+{
+    "tierFallback": true
+}
+```
+
+### ¿Cómo funciona?
+
+Cuando el sistema no puede encontrar suficientes Pokémon de un tier específico, automáticamente busca Pokémon en otros tiers siguiendo esta prioridad:
+
+1. **Tiers inferiores primero**: Si necesita tier B, busca en C → D → E...
+2. **Tiers superiores después**: Si no encuentra en inferiores, busca en A → S
+
+#### Ejemplo práctico
+
+Tienes en tu región:
+
+-   **Tier A**: 5 Pokémon
+-   **Tier B**: 0 Pokémon (no existe)
+-   **Tier C**: 2 Pokémon
+-   **Tier D**: 0 Pokémon
+
+Si la configuración requiere 3 Pokémon de tier B:
+
+1. **Busca tier B** → no encuentra ninguno
+2. **Fallback a tier C** → encuentra 2, usa 2
+3. **Fallback a tier D** → no encuentra ninguno
+4. **Fallback a tier A** → encuentra 5, usa 1
+5. **Resultado**: 3 slots de "tier B" rellenados con 2 tier C + 1 tier A
+
+### Funciones principales
+
+#### Generación de tienda
+
+-   **Automático**: La tienda se genera aplicando fallback cuando es necesario
+-   **Ordenamiento**: Los Pokémon se ordenan por tier independientemente del fallback aplicado
+
+#### Rerolls con confirmación
+
+Cuando `tierFallback` está activo y un reroll causaría una degradación de tier, aparece una confirmación:
+
+```
+El tier se reducirá de A a B al rerollear. ¿Continuar?
+```
+
+-   **Aceptar**: Procede con el reroll usando el tier inferior
+-   **Cancelar**: Mantiene el Pokémon actual sin gastar el reroll
+
+### Compatibilidad
+
+El sistema de fallback respeta todas las configuraciones existentes:
+
+-   ✅ **allowDuplicates**: No genera duplicados si está desactivado
+-   ✅ **includePurchasedInRerollPool**: Excluye comprados si está desactivado
+-   ✅ **quota** y **tierWeights**: Mantiene la distribución configurada
+-   ✅ **Filtros de región**: Solo busca en la región actual
+
+### Cuándo usar fallback
+
+**Recomendado para**:
+
+-   Regiones con pocos Pokémon por tier
+-   Configuraciones con cuotas altas
+-   Garantizar tiendas siempre llenas
+
+**No recomendado para**:
+
+-   Experiencias que requieren tiers específicos estrictos
+-   Cuando prefieres slots vacíos a mezclas de tiers
 
 ## Reglas de tienda y rerolls
 

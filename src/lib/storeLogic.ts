@@ -164,6 +164,36 @@ function computeTierCounts(
     return counts;
 }
 
+// ================= Fallback de Tiers =================
+
+// Encuentra tiers alternativos cuando no hay Pokémon disponibles en el tier original
+function findFallbackTiers(
+    originalTier: string,
+    tierWeights: Record<string, number>
+): string[] {
+    const fallbackTiers: string[] = [];
+    const originalPriority = tierPriority(originalTier);
+
+    // Obtener todos los tiers de la configuración, excluyendo el tier original
+    const allConfigTiers = Object.keys(tierWeights).filter(tier =>
+        tier.toUpperCase() !== originalTier.toUpperCase()
+    );
+
+    // Primero buscar tiers inferiores (menor prioridad): C, D, E...
+    const lowerTiers = allConfigTiers
+        .filter(tier => tierPriority(tier) < originalPriority)
+        .sort((a, b) => tierPriority(b) - tierPriority(a)); // Mayor a menor prioridad (C antes que D)
+
+    // Luego buscar tiers superiores (mayor prioridad): A, S
+    const higherTiers = allConfigTiers
+        .filter(tier => tierPriority(tier) > originalPriority)
+        .sort((a, b) => tierPriority(a) - tierPriority(b)); // Menor a mayor prioridad (A antes que S)
+
+    fallbackTiers.push(...lowerTiers, ...higherTiers);
+
+    return fallbackTiers;
+}
+
 // ================= Generación de Tienda =================
 
 /**
@@ -183,13 +213,30 @@ export function buildShopForRegion(
     config: AppConfig,
     purchasedIds: Set<number>
 ): Pokemon[] {
+    console.log(`[TierFallback] ===== Starting shop generation for region: ${region} =====`);
+    console.log(`[TierFallback] TierFallback enabled: ${config.tierFallback}`);
+    console.log(`[TierFallback] Shop size: ${config.shopSize}`);
+    console.log(`[TierFallback] Purchased IDs: [${Array.from(purchasedIds).join(', ')}]`);
+
     // Filtrar pokémon disponibles en la región
     const regionPool = allPokemon.filter((pokemon) => byRegion(pokemon, region));
+    console.log(`[TierFallback] Total Pokémon in region ${region}: ${regionPool.length}`);
 
     // Calcular distribución de tiers
     const minQuota = normalizeMinQuota(config.quota);
     const weights = normalizeWeights(config.tierWeights);
     const tierCounts = computeTierCounts(config.shopSize, minQuota, weights);
+
+    console.log(`[TierFallback] Requested tier counts:`, tierCounts);
+    console.log(`[TierFallback] Tier weights:`, weights);
+
+    // Log available Pokémon by tier in this region
+    const availableByTier = regionPool.reduce((acc, pokemon) => {
+        const tier = pokemon.tier.toUpperCase();
+        acc[tier] = (acc[tier] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>);
+    console.log(`[TierFallback] Available Pokémon by tier in ${region}:`, availableByTier);
 
     // Procesar tiers de mayor a menor prioridad (S → A → B → C...)
     const tiersByPriority = sortTiersDesc(Object.keys(tierCounts));
@@ -199,14 +246,54 @@ export function buildShopForRegion(
         const requiredCount = Math.max(0, tierCounts[currentTier] || 0);
         if (requiredCount <= 0) continue;
 
-        // Crear pool de pokémon para este tier
-        let tierPool = regionPool
-            .filter((pokemon) => String(pokemon.tier).toUpperCase() === currentTier)
-            .map((pokemon) => ({ ...pokemon } as Pokemon & { __uid?: string }));
+        console.log(`[TierFallback] Processing tier ${currentTier}, need ${requiredCount} Pokémon`);
 
-        // Excluir pokémon ya comprados si está configurado así
-        if (!config.includePurchasedInRerollPool) {
-            tierPool = tierPool.filter((pokemon) => !purchasedIds.has(pokemon.id));
+        // Función helper para obtener pool de candidatos para un tier específico
+        const getCandidatePoolForTier = (searchTier: string) => {
+            let pool = regionPool
+                .filter((pokemon) => String(pokemon.tier).toUpperCase() === searchTier)
+                .map((pokemon) => ({ ...pokemon } as Pokemon & { __uid?: string }));
+
+            console.log(`[TierFallback] Found ${pool.length} ${searchTier} tier Pokémon in region before purchase filter`);
+
+            // Excluir pokémon ya comprados si está configurado así
+            if (!config.includePurchasedInRerollPool) {
+                const beforeFilter = pool.length;
+                pool = pool.filter((pokemon) => !purchasedIds.has(pokemon.id));
+                console.log(`[TierFallback] After purchase filter: ${pool.length} ${searchTier} tier Pokémon (removed ${beforeFilter - pool.length})`);
+            }
+
+            return pool;
+        };
+
+        // Crear pool de pokémon para este tier
+        let tierPool = getCandidatePoolForTier(currentTier);
+
+        // Si el tier fallback está habilitado y no hay Pokémon disponibles
+        if (config.tierFallback && tierPool.length === 0) {
+            console.log(`[TierFallback] No Pokémon available for tier ${currentTier}, starting fallback search`);
+
+            // Buscar tiers alternativos usando la configuración de tierWeights
+            const fallbackTiers = findFallbackTiers(currentTier, weights);
+            console.log(`[TierFallback] Fallback chain for tier ${currentTier}: ${fallbackTiers.join(' → ')}`);
+
+            // Intentar obtener Pokémon de los tiers alternativos
+            for (const fallbackTier of fallbackTiers) {
+                console.log(`[TierFallback] Trying fallback tier ${fallbackTier}...`);
+                tierPool = getCandidatePoolForTier(fallbackTier);
+
+                // Si encontramos Pokémon en este tier alternativo, salir del bucle
+                if (tierPool.length > 0) {
+                    console.log(`[TierFallback] SUCCESS: Tier ${currentTier} not available, using tier ${fallbackTier} instead (found ${tierPool.length} candidates)`);
+                    break;
+                } else {
+                    console.log(`[TierFallback] No candidates found in fallback tier ${fallbackTier}`);
+                }
+            }
+
+            if (tierPool.length === 0) {
+                console.log(`[TierFallback] FAILED: No Pokémon found in any fallback tier for ${currentTier}. Tried: ${fallbackTiers.join(', ')}`);
+            }
         }
 
         // Manejar duplicados según configuración
@@ -217,9 +304,13 @@ export function buildShopForRegion(
                 tierPool.push({ ...randomPokemon });
             }
         } else {
+            console.log(`[TierFallback] Applying duplicate filtering for tier ${currentTier} (${tierPool.length} candidates)`);
+
             // Marcar duplicados como huecos
             const usedIds = new Set(shopResult.map((pokemon) => pokemon?.id));
             const seenIds = new Set<number>();
+
+            console.log(`[TierFallback] Already used IDs in shop: [${Array.from(usedIds).join(', ')}]`);
 
             tierPool.forEach((pokemon) => {
                 const isDuplicateInTier = seenIds.has(pokemon.id);
@@ -231,6 +322,54 @@ export function buildShopForRegion(
                     seenIds.add(pokemon.id);
                 }
             });
+
+            // Si después de manejar duplicados no hay Pokémon válidos y tier fallback está habilitado
+            const validPokemon = tierPool.filter(pokemon => pokemon.id !== -1);
+            console.log(`[TierFallback] After duplicate filtering: ${validPokemon.length} valid Pokémon for tier ${currentTier}`);
+
+            if (config.tierFallback && validPokemon.length === 0) {
+                console.log(`[TierFallback] No valid Pokémon for tier ${currentTier} after duplicate filtering, starting fallback search`);
+
+                // Buscar tiers alternativos usando la configuración de tierWeights
+                const fallbackTiers = findFallbackTiers(currentTier, weights);
+                console.log(`[TierFallback] Duplicate fallback chain for tier ${currentTier}: ${fallbackTiers.join(' → ')}`);
+
+                // Intentar obtener Pokémon de los tiers alternativos
+                for (const fallbackTier of fallbackTiers) {
+                    console.log(`[TierFallback] Trying duplicate fallback tier ${fallbackTier}...`);
+                    let fallbackPool = getCandidatePoolForTier(fallbackTier);
+
+                    // Aplicar filtro de duplicados al pool alternativo
+                    const fallbackUsedIds = new Set(shopResult.map((pokemon) => pokemon?.id));
+                    const fallbackSeenIds = new Set<number>();
+
+                    fallbackPool.forEach((pokemon) => {
+                        const isDuplicateInTier = fallbackSeenIds.has(pokemon.id);
+                        const isAlreadyInShop = fallbackUsedIds.has(pokemon.id);
+
+                        if (isDuplicateInTier || isAlreadyInShop) {
+                            pokemon.id = -1; // Marcar como hueco
+                        } else {
+                            fallbackSeenIds.add(pokemon.id);
+                        }
+                    });
+
+                    const validFallbackPokemon = fallbackPool.filter(pokemon => pokemon.id !== -1);
+                    console.log(`[TierFallback] Fallback tier ${fallbackTier} has ${validFallbackPokemon.length} valid Pokémon after duplicate filtering`);
+
+                    if (validFallbackPokemon.length > 0) {
+                        console.log(`[TierFallback] SUCCESS: Tier ${currentTier} exhausted after duplicate filtering, using tier ${fallbackTier} instead`);
+                        tierPool = fallbackPool;
+                        break;
+                    } else {
+                        console.log(`[TierFallback] No valid candidates found in duplicate fallback tier ${fallbackTier}`);
+                    }
+                }
+
+                if (tierPool.filter(pokemon => pokemon.id !== -1).length === 0) {
+                    console.log(`[TierFallback] FAILED: No valid Pokémon found in any duplicate fallback tier for ${currentTier}. Tried: ${fallbackTiers.join(', ')}`);
+                }
+            }
         }
 
         // Asignar UIDs únicos para distinguir huecos
@@ -250,12 +389,13 @@ export function buildShopForRegion(
 
         // Seleccionar pokémon para la tienda
         if (requiredCount > 0) {
-            const realPokemon = tierPool.filter((pokemon) => pokemon.id !== -1);
-            const holePokemon = tierPool.filter((pokemon) => pokemon.id === -1);
             const selectedPokemon: (Pokemon & { __uid?: string })[] = [];
+            let remainingNeeded = requiredCount;
 
-            // Priorizar pokémon reales
-            const realCount = Math.min(requiredCount, realPokemon.length);
+            // Usar el tierPool actual (que puede ser del tier original o fallback)
+            const realPokemon = tierPool.filter((pokemon) => pokemon.id !== -1);
+            const realCount = Math.min(remainingNeeded, realPokemon.length);
+
             if (realCount > 0) {
                 const pickedReal = sampleWithoutReplacement(
                     realPokemon,
@@ -264,40 +404,193 @@ export function buildShopForRegion(
                     shopResult
                 );
                 selectedPokemon.push(...pickedReal);
+                remainingNeeded -= pickedReal.length;
+                console.log(`[TierFallback] Selected ${pickedReal.length} real Pokémon for tier ${currentTier}, still need ${remainingNeeded}`);
+            }
+
+            // Si aún necesitamos más Pokémon y tier fallback está habilitado, buscar en más tiers
+            if (config.tierFallback && remainingNeeded > 0) {
+                console.log(`[TierFallback] Still need ${remainingNeeded} more Pokémon for tier ${currentTier}, searching additional fallback tiers`);
+
+                const fallbackTiers = findFallbackTiers(currentTier, weights);
+                const usedTiers = new Set<string>();
+
+                // Si ya usamos un tier de fallback, añadirlo a los usados
+                const currentTierUsed = tierPool.some(p => p.id !== -1 && p.tier.toUpperCase() !== currentTier.toUpperCase());
+                if (currentTierUsed) {
+                    const usedTier = tierPool.find(p => p.id !== -1)?.tier.toUpperCase();
+                    if (usedTier) usedTiers.add(usedTier);
+                }
+
+                for (const fallbackTier of fallbackTiers) {
+                    if (remainingNeeded <= 0 || usedTiers.has(fallbackTier)) continue;
+
+                    console.log(`[TierFallback] Trying additional fallback tier ${fallbackTier} for ${remainingNeeded} more slots...`);
+                    let additionalPool = getCandidatePoolForTier(fallbackTier);
+
+                    // Aplicar filtro de duplicados
+                    const currentUsedIds = new Set([
+                        ...shopResult.map(p => p?.id),
+                        ...selectedPokemon.map(p => p?.id)
+                    ].filter(id => id !== -1));
+
+                    const additionalSeenIds = new Set<number>();
+                    additionalPool.forEach((pokemon) => {
+                        const isDuplicateInTier = additionalSeenIds.has(pokemon.id);
+                        const isAlreadyUsed = currentUsedIds.has(pokemon.id);
+
+                        if (isDuplicateInTier || isAlreadyUsed) {
+                            pokemon.id = -1;
+                        } else {
+                            additionalSeenIds.add(pokemon.id);
+                        }
+                    });
+
+                    const validAdditional = additionalPool.filter(pokemon => pokemon.id !== -1);
+                    const additionalCount = Math.min(remainingNeeded, validAdditional.length);
+
+                    if (additionalCount > 0) {
+                        const pickedAdditional = sampleWithoutReplacement(
+                            validAdditional,
+                            additionalCount,
+                            pokemonEquals,
+                            [...shopResult, ...selectedPokemon]
+                        );
+                        selectedPokemon.push(...pickedAdditional);
+                        remainingNeeded -= pickedAdditional.length;
+                        usedTiers.add(fallbackTier);
+                        console.log(`[TierFallback] Selected ${pickedAdditional.length} additional Pokémon from tier ${fallbackTier}, still need ${remainingNeeded}`);
+                    }
+                }
             }
 
             // Completar con huecos si es necesario
-            const remainingSlots = requiredCount - selectedPokemon.length;
-            if (remainingSlots > 0) {
-                const pickedHoles = sampleWithoutReplacement(
-                    holePokemon,
-                    Math.min(remainingSlots, holePokemon.length),
-                    pokemonEquals,
-                    shopResult.concat(selectedPokemon)
-                );
-                selectedPokemon.push(...pickedHoles);
-            }
-
-            // Crear huecos sintéticos si aún faltan slots
-            while (selectedPokemon.length < requiredCount) {
-                selectedPokemon.push({
-                    id: -1,
-                    nombre: '—',
-                    tier: currentTier,
-                    precio: 0,
-                    regiones: [region],
-                    __uid: crypto.randomUUID(),
-                });
+            if (remainingNeeded > 0) {
+                console.log(`[TierFallback] Creating ${remainingNeeded} empty slots for tier ${currentTier}`);
+                for (let i = 0; i < remainingNeeded; i++) {
+                    selectedPokemon.push({
+                        id: -1,
+                        nombre: '—',
+                        tier: currentTier,
+                        precio: 0,
+                        regiones: [region],
+                        __uid: crypto.randomUUID(),
+                    });
+                }
             }
 
             shopResult.push(...selectedPokemon);
         }
     }
 
-    return shopResult;
+    // Ordenar el resultado final por prioridad de tier (S → A → B → C → D...)
+    console.log(`[Shop] Sorting final shop by tier priority...`);
+    const sortedShopResult = shopResult.sort((a, b) => {
+        // Ordenar por prioridad de tier (mayor prioridad primero)
+        const aPriority = tierPriority(a.tier);
+        const bPriority = tierPriority(b.tier);
+        if (aPriority !== bPriority) return bPriority - aPriority;
+
+        // Si tienen el mismo tier, los Pokémon reales van antes que los huecos
+        if (a.id === -1 && b.id !== -1) return 1;
+        if (a.id !== -1 && b.id === -1) return -1;
+
+        // Si ambos son huecos o ambos son reales del mismo tier, ordenar por nombre
+        if (a.id !== -1 && b.id !== -1) {
+            return a.nombre.localeCompare(b.nombre);
+        }
+
+        return 0; // Ambos son huecos del mismo tier
+    });
+
+    // Log final shop composition
+    const finalComposition = sortedShopResult.reduce((acc, pokemon) => {
+        if (pokemon.id === -1) {
+            acc['EMPTY'] = (acc['EMPTY'] || 0) + 1;
+        } else {
+            acc[pokemon.tier] = (acc[pokemon.tier] || 0) + 1;
+        }
+        return acc;
+    }, {} as Record<string, number>);
+
+    console.log(`[Shop] Final shop composition after sorting:`, finalComposition);
+    console.log(`[Shop] Shop generation completed for region ${region}. Total slots: ${sortedShopResult.length}`);
+
+    return sortedShopResult;
 }
 
 // ================= Sistema de Reroll =================
+
+// Verifica si un reroll causaría una degradación de tier
+export function wouldRerollCauseTierDowngrade(
+    allPokemon: Pokemon[],
+    region: string,
+    tier: Tier,
+    usedIds: Set<number>,
+    purchasedIds: Set<number>,
+    forbiddenId: number | null,
+    config: AppConfig
+): { wouldDowngrade: boolean; fallbackTier?: string } {
+    if (!config.tierFallback) {
+        return { wouldDowngrade: false };
+    }
+
+    const targetTier = String(tier).toUpperCase();
+
+    // Función helper para filtrar candidatos por tier
+    const getCandidatesForTier = (searchTier: string) => {
+        let candidatePool = allPokemon.filter(
+            (pokemon) => byRegion(pokemon, region) && pokemon.tier.toUpperCase() === searchTier
+        );
+
+        // Excluir pokémon comprados si está configurado así
+        if (!config.includePurchasedInRerollPool) {
+            candidatePool = candidatePool.filter((pokemon) => !purchasedIds.has(pokemon.id));
+        }
+
+        // Excluir duplicados si no están permitidos
+        if (!config.allowDuplicates) {
+            candidatePool = candidatePool.filter((pokemon) => !usedIds.has(pokemon.id));
+        }
+
+        // Excluir el pokémon actual que se está rerolleando
+        if (forbiddenId != null) {
+            candidatePool = candidatePool.filter((pokemon) => pokemon.id !== forbiddenId);
+        }
+
+        return candidatePool;
+    };
+
+    // Intentar encontrar candidatos en el tier original
+    const candidatePool = getCandidatesForTier(targetTier);
+
+    // Si hay candidatos en el tier original, no habrá degradación
+    if (candidatePool.length > 0) {
+        return { wouldDowngrade: false };
+    }
+
+    // Si no hay candidatos y tier fallback está habilitado, verificar el primer tier de fallback disponible
+    const weights = normalizeWeights(config.tierWeights);
+    const fallbackTiers = findFallbackTiers(targetTier, weights);
+
+    for (const fallbackTier of fallbackTiers) {
+        const fallbackCandidates = getCandidatesForTier(fallbackTier);
+        if (fallbackCandidates.length > 0) {
+            // Hay candidatos en un tier de fallback - verificar si es una degradación
+            const originalPriority = tierPriority(targetTier);
+            const fallbackPriority = tierPriority(fallbackTier);
+
+            if (fallbackPriority < originalPriority) {
+                return { wouldDowngrade: true, fallbackTier };
+            } else {
+                return { wouldDowngrade: false, fallbackTier };
+            }
+        }
+    }
+
+    // No hay candidatos en ningún tier
+    return { wouldDowngrade: false };
+}
 
 // Busca un pokémon candidato válido para reemplazar en un reroll
 export function findRerollCandidate(
@@ -311,24 +604,46 @@ export function findRerollCandidate(
 ): Pokemon | null {
     const targetTier = String(tier).toUpperCase();
 
-    // Filtrar candidatos por región y tier
-    let candidatePool = allPokemon.filter(
-        (pokemon) => byRegion(pokemon, region) && pokemon.tier.toUpperCase() === targetTier
-    );
+    // Función helper para filtrar candidatos por tier
+    const getCandidatesForTier = (searchTier: string) => {
+        let candidatePool = allPokemon.filter(
+            (pokemon) => byRegion(pokemon, region) && pokemon.tier.toUpperCase() === searchTier
+        );
 
-    // Excluir pokémon comprados si está configurado así
-    if (!config.includePurchasedInRerollPool) {
-        candidatePool = candidatePool.filter((pokemon) => !purchasedIds.has(pokemon.id));
-    }
+        // Excluir pokémon comprados si está configurado así
+        if (!config.includePurchasedInRerollPool) {
+            candidatePool = candidatePool.filter((pokemon) => !purchasedIds.has(pokemon.id));
+        }
 
-    // Excluir duplicados si no están permitidos
-    if (!config.allowDuplicates) {
-        candidatePool = candidatePool.filter((pokemon) => !usedIds.has(pokemon.id));
-    }
+        // Excluir duplicados si no están permitidos
+        if (!config.allowDuplicates) {
+            candidatePool = candidatePool.filter((pokemon) => !usedIds.has(pokemon.id));
+        }
 
-    // Excluir el pokémon actual que se está rerolleando
-    if (forbiddenId != null) {
-        candidatePool = candidatePool.filter((pokemon) => pokemon.id !== forbiddenId);
+        // Excluir el pokémon actual que se está rerolleando
+        if (forbiddenId != null) {
+            candidatePool = candidatePool.filter((pokemon) => pokemon.id !== forbiddenId);
+        }
+
+        return candidatePool;
+    };
+
+    // Intentar encontrar candidatos en el tier original
+    let candidatePool = getCandidatesForTier(targetTier);
+
+    // Si no hay candidatos y el tier fallback está habilitado
+    if (candidatePool.length === 0 && config.tierFallback) {
+        // Buscar tiers alternativos usando la configuración de tierWeights
+        const weights = normalizeWeights(config.tierWeights);
+        const fallbackTiers = findFallbackTiers(targetTier, weights);
+
+        // Intentar obtener candidatos de los tiers alternativos
+        for (const fallbackTier of fallbackTiers) {
+            candidatePool = getCandidatesForTier(fallbackTier);
+            if (candidatePool.length > 0) {
+                break;
+            }
+        }
     }
 
     // Si no hay candidatos válidos, retornar null

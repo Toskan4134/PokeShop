@@ -17,5 +17,6 @@
     },
     "defaultTierColor": "#9ca3af",
     "includePurchasedInRerollPool": false,
-    "shopBuySlotAutofill": false
+    "shopBuySlotAutofill": false,
+    "tierFallback": true
 }

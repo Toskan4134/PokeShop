@@ -86,4 +86,5 @@ export interface AppConfig {
     defaultTierColor?: string; // color por defecto para tiers desconocidos
     includePurchasedInRerollPool?: boolean; // si true, comprados pueden volver a salir en reroll
     shopBuySlotAutofill?: boolean; // Rellenar automáticamente el slot tras comprar (si hay huecos)
+    tierFallback?: boolean; // si true, cuando no hay Pokémon en un tier, busca en tiers inferiores y luego superiores
 }
