@@ -42,7 +42,7 @@ export default function SpriteImg({
                 const el = e.currentTarget as HTMLImageElement;
                 if (!el.dataset._fallback) {
                     el.dataset._fallback = '1';
-                    el.src = '/sprites-default/empty.png';
+                    el.src = '/sprites-default/missing.png';
                 }
             }}
             style={{ width: size, height: size }}

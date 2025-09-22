@@ -70,14 +70,23 @@ export default function ProfileManager() {
 
         // Listen for profile updates from save operations
         const handleProfileUpdate = (event: CustomEvent) => {
-            console.log(`[ProfileManager UI] Profile updated via save operation:`, event.detail);
+            console.log(
+                `[ProfileManager UI] Profile updated via save operation:`,
+                event.detail
+            );
             loadProfiles(); // Refresh the profile list
         };
 
-        window.addEventListener('profileUpdated', handleProfileUpdate as EventListener);
+        window.addEventListener(
+            'profileUpdated',
+            handleProfileUpdate as EventListener
+        );
 
         return () => {
-            window.removeEventListener('profileUpdated', handleProfileUpdate as EventListener);
+            window.removeEventListener(
+                'profileUpdated',
+                handleProfileUpdate as EventListener
+            );
         };
     }, []);
 
@@ -90,21 +99,31 @@ export default function ProfileManager() {
             });
 
             // Detect manually added profiles when opening dropdown
-            console.log(`[ProfileManager UI] Detecting manually added profiles...`);
+            console.log(
+                `[ProfileManager UI] Detecting manually added profiles...`
+            );
             try {
-                const needsProfileLoad = await detectAndRegisterManualProfiles();
+                const needsProfileLoad =
+                    await detectAndRegisterManualProfiles();
                 // Refresh profile list to show any newly detected profiles
                 await loadProfiles();
 
                 // If a new current profile was set, we need to reload the store with that profile's data
                 if (needsProfileLoad) {
-                    console.log(`[ProfileManager UI] New current profile detected, reloading store...`);
+                    console.log(
+                        `[ProfileManager UI] New current profile detected, reloading store...`
+                    );
                     const currentId = await getCurrentProfile();
                     await refreshForProfileSwitch(undefined, currentId);
-                    console.log(`[ProfileManager UI] Store reloaded with current profile data`);
+                    console.log(
+                        `[ProfileManager UI] Store reloaded with current profile data`
+                    );
                 }
             } catch (err) {
-                console.warn(`[ProfileManager UI] Error during profile detection:`, err);
+                console.warn(
+                    `[ProfileManager UI] Error during profile detection:`,
+                    err
+                );
             }
         }
         setIsOpen(!isOpen);
@@ -243,6 +262,23 @@ export default function ProfileManager() {
 
     const currentProfile = profiles.find((p) => p.id === currentProfileId);
 
+    // Componente para nombre de perfil con truncamiento simple
+    const ProfileNameDisplay = ({ profile }: { profile: Profile }) => {
+        return (
+            <div className='flex-1 min-w-0'>
+                <div className='font-medium text-neutral-100'>
+                    <span className='block truncate' title={profile.name}>
+                        {profile.name}
+                    </span>
+                </div>
+                <div className='text-xs text-neutral-400'>
+                    {profile.id === currentProfileId && '(Activo) • '}
+                    {new Date(profile.created).toLocaleDateString()}
+                </div>
+            </div>
+        );
+    };
+
     const dropdown = isOpen ? (
         <div
             ref={dropdownRef}
@@ -319,20 +355,8 @@ export default function ProfileManager() {
                                     </div>
                                 ) : (
                                     <>
-                                        <div className='flex-1'>
-                                            <div className='font-medium text-neutral-100'>
-                                                {profile.name}
-                                            </div>
-                                            <div className='text-xs text-neutral-400'>
-                                                {profile.id ===
-                                                    currentProfileId &&
-                                                    '(Activo) • '}
-                                                {new Date(
-                                                    profile.created
-                                                ).toLocaleDateString()}
-                                            </div>
-                                        </div>
-                                        <div className='flex items-center gap-1'>
+                                        <ProfileNameDisplay profile={profile} />
+                                        <div className='flex items-center gap-1 flex-shrink-0'>
                                             {profile.id !==
                                                 currentProfileId && (
                                                 <button
@@ -480,11 +504,18 @@ export default function ProfileManager() {
         <>
             <button
                 ref={buttonRef}
-                className='btn-secondary flex items-center gap-2'
+                className='btn-secondary flex items-center gap-2 max-w-48'
                 onClick={toggleDropdown}
-                title='Perfiles'
+                title={
+                    currentProfile?.name
+                        ? `Perfil: ${currentProfile.name}`
+                        : 'Perfiles'
+                }
             >
-                👤 {currentProfile?.name || 'Perfíl'}
+                👤
+                <span className='truncate'>
+                    {currentProfile?.name || 'Perfíl'}
+                </span>
             </button>
             {dropdown && createPortal(dropdown, document.body)}
         </>

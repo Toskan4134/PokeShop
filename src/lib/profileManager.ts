@@ -25,8 +25,28 @@ export interface ProfileMetadata {
 
 const PROFILES_DIR = 'profiles';
 const PROFILES_METADATA_FILE = 'profiles.json';
-const CURRENT_PROFILE_FILE = 'current-profile.json';
-const DEFAULT_PROFILE_ID = 'default';
+const DEFAULT_PROFILE_NAME = 'Predeterminado';
+
+// Obtiene o crea el ID del perfil por defecto
+async function getOrCreateDefaultProfileId(): Promise<string> {
+    const configDir = await appConfigDir();
+    const metadataPath = await join(configDir, PROFILES_METADATA_FILE);
+
+    try {
+        const content = await readTextFile(metadataPath);
+        const metadata = JSON.parse(content) as ProfileMetadata;
+        const defaultProfile = metadata.profiles.find(p => p.name === DEFAULT_PROFILE_NAME);
+
+        if (defaultProfile) {
+            return defaultProfile.id;
+        }
+    } catch (err) {
+        // Si no se puede leer el metadata, se creará un nuevo ID
+    }
+
+    // Si no existe el perfil por defecto, generar nuevo ID
+    return generateProfileId();
+}
 
 export async function getProfilesDir(): Promise<string> {
     const configDir = await appConfigDir();
@@ -40,11 +60,22 @@ export async function getProfileDir(profileId: string): Promise<string> {
     console.log(`[ProfileManager] getProfileDir called with profileId: ${profileId}`);
     const profilesDir = await getProfilesDir();
 
-    // For default profile, use 'default' folder name
-    if (profileId === DEFAULT_PROFILE_ID) {
-        const defaultDir = await join(profilesDir, 'default');
-        console.log(`[ProfileManager] Using default profile dir: ${defaultDir}`);
-        return defaultDir;
+    // Obtener información del perfil para determinar su carpeta
+    const configDir = await appConfigDir();
+    const metadataPath = await join(configDir, PROFILES_METADATA_FILE);
+
+    try {
+        const content = await readTextFile(metadataPath);
+        const metadata = JSON.parse(content) as ProfileMetadata;
+        const profile = metadata.profiles.find(p => p.id === profileId);
+
+        if (profile) {
+            const profileDir = await join(profilesDir, sanitizeProfileName(profile.name));
+            console.log(`[ProfileManager] Using profile dir: ${profileDir} for profile: ${profile.name}`);
+            return profileDir;
+        }
+    } catch (err) {
+        console.warn(`[ProfileManager] Error reading metadata for profile dir:`, err);
     }
 
     // First, try to find the actual folder by scanning for save files with matching profile ID
@@ -77,12 +108,12 @@ export async function getProfileDir(profileId: string): Promise<string> {
                                     const profile = metadata.profiles.find(p => p.id === profileId);
 
                                     if (profile) {
-                                        const expectedFolderName = profileId === DEFAULT_PROFILE_ID ? 'default' : sanitizeProfileName(profile.name);
+                                        const expectedFolderName = profile.name === DEFAULT_PROFILE_NAME ? DEFAULT_PROFILE_NAME : sanitizeProfileName(profile.name);
 
                                         if (folderName !== expectedFolderName) {
                                             // Folder name has changed, update the profile name
                                             const oldProfileName = profile.name;
-                                            const newProfileName = folderName === 'default' ? 'Predeterminado' : folderName.replace(/_/g, ' ');
+                                            const newProfileName = folderName === DEFAULT_PROFILE_NAME ? DEFAULT_PROFILE_NAME : folderName.replace(/_/g, ' ');
                                             profile.name = newProfileName;
 
                                             await saveProfileMetadata(metadata);
@@ -147,29 +178,23 @@ export async function ensureProfilesStructure(): Promise<void> {
     await mkdir(profilesDir, { recursive: true });
 
     const metadataPath = await join(configDir, PROFILES_METADATA_FILE);
-    const currentProfilePath = await join(configDir, CURRENT_PROFILE_FILE);
 
     if (!(await exists(metadataPath))) {
         console.log(`[ProfileManager] Creating initial profiles metadata`);
+        const defaultProfileId = generateProfileId(); // Generar ID aleatorio para el perfil por defecto
         const defaultMetadata: ProfileMetadata = {
             profiles: [{
-                id: DEFAULT_PROFILE_ID,
-                name: 'Predeterminado',
+                id: defaultProfileId,
+                name: DEFAULT_PROFILE_NAME,
                 created: new Date().toISOString(),
                 lastUsed: new Date().toISOString()
             }],
-            currentProfile: DEFAULT_PROFILE_ID
+            currentProfile: defaultProfileId
         };
         await writeTextFile(metadataPath, JSON.stringify(defaultMetadata, null, 2));
+        console.log(`[ProfileManager] Created default profile with ID: ${defaultProfileId}`);
     } else {
         console.log(`[ProfileManager] Profiles metadata already exists`);
-    }
-
-    if (!(await exists(currentProfilePath))) {
-        console.log(`[ProfileManager] Creating current profile file`);
-        await writeTextFile(currentProfilePath, JSON.stringify({ profile: DEFAULT_PROFILE_ID }, null, 2));
-    } else {
-        console.log(`[ProfileManager] Current profile file already exists`);
     }
 
     await ensureDefaultProfile();
@@ -184,7 +209,7 @@ export async function ensureDefaultProfile(): Promise<void> {
     if (!(await exists(metadataPath))) {
         console.log(`[ProfileManager] Initial setup - creating default profile folder`);
         const profilesDir = await getProfilesDir();
-        const defaultProfileDir = await join(profilesDir, 'default');
+        const defaultProfileDir = await join(profilesDir, DEFAULT_PROFILE_NAME);
         await mkdir(defaultProfileDir, { recursive: true });
 
         const configPath = await join(defaultProfileDir, 'config.json');
@@ -241,13 +266,14 @@ export async function detectAndRegisterManualProfiles(): Promise<boolean> {
             metadata = JSON.parse(content) as ProfileMetadata;
         } catch {
             // If metadata doesn't exist, create default
+            const defaultProfileId = generateProfileId();
             metadata = {
                 profiles: [{
-                    id: DEFAULT_PROFILE_ID,
-                    name: 'Predeterminado',
+                    id: defaultProfileId,
+                    name: DEFAULT_PROFILE_NAME,
                     created: new Date().toISOString()
                 }],
-                currentProfile: DEFAULT_PROFILE_ID
+                currentProfile: defaultProfileId
             };
         }
 
@@ -312,7 +338,7 @@ export async function detectAndRegisterManualProfiles(): Promise<boolean> {
 
             // If no ID match, try to match by expected folder name (for legacy compatibility)
             if (!matchedFolder) {
-                const expectedFolderName = profile.id === DEFAULT_PROFILE_ID ? 'default' : sanitizeProfileName(profile.name);
+                const expectedFolderName = profile.name === DEFAULT_PROFILE_NAME ? DEFAULT_PROFILE_NAME : sanitizeProfileName(profile.name);
                 if (validFolders.has(expectedFolderName) && !processedFolders.has(expectedFolderName)) {
                     matchedFolder = expectedFolderName;
                     console.log(`[ProfileManager] Matched profile "${profile.name}" to expected folder "${expectedFolderName}"`);
@@ -321,12 +347,12 @@ export async function detectAndRegisterManualProfiles(): Promise<boolean> {
 
             if (matchedFolder) {
                 // Check if the folder name has changed and update the profile name accordingly
-                const expectedFolderName = profile.id === DEFAULT_PROFILE_ID ? 'default' : sanitizeProfileName(profile.name);
+                const expectedFolderName = profile.name === DEFAULT_PROFILE_NAME ? DEFAULT_PROFILE_NAME : sanitizeProfileName(profile.name);
                 let updatedProfile = profile;
 
                 if (matchedFolder !== expectedFolderName) {
                     // Folder name has changed, update the profile name to match
-                    const newProfileName = matchedFolder === 'default' ? 'Predeterminado' : matchedFolder.replace(/_/g, ' ');
+                    const newProfileName = matchedFolder === DEFAULT_PROFILE_NAME ? DEFAULT_PROFILE_NAME : matchedFolder.replace(/_/g, ' ');
                     updatedProfile = {
                         ...profile,
                         name: newProfileName
@@ -349,7 +375,7 @@ export async function detectAndRegisterManualProfiles(): Promise<boolean> {
 
         // Step 3: Add new profiles for remaining unprocessed folders
         for (const folderName of validFolders) {
-            const profileName = folderName === 'default' ? 'Predeterminado' : folderName.replace(/_/g, ' ');
+            const profileName = folderName === DEFAULT_PROFILE_NAME ? DEFAULT_PROFILE_NAME : folderName.replace(/_/g, ' ');
 
             // Use the profile ID from the save file if available, otherwise generate new one
             let newProfileId: string;
@@ -359,7 +385,7 @@ export async function detectAndRegisterManualProfiles(): Promise<boolean> {
                 newProfileId = savedProfileId;
                 console.log(`[ProfileManager] Adding profile: "${profileName}" from folder "${folderName}" with existing ID: ${savedProfileId}`);
             } else {
-                newProfileId = folderName === 'default' ? DEFAULT_PROFILE_ID : generateProfileId();
+                newProfileId = generateProfileId(); // Todos los perfiles ahora tienen ID aleatorio
                 console.log(`[ProfileManager] Adding new profile: "${profileName}" from folder "${folderName}" with new ID: ${newProfileId}`);
             }
 
@@ -401,12 +427,9 @@ export async function detectAndRegisterManualProfiles(): Promise<boolean> {
             console.log(`[ProfileManager] Saving updated metadata: ${validProfiles.length} existing + ${newProfiles.length} new profiles, current: ${metadata.currentProfile}`);
             await saveProfileMetadata(metadata);
 
-            // Also update the current-profile.json file to ensure consistency
+            // Current profile is now stored only in profiles.json
             if (needsCurrentProfileUpdate) {
-                const configDir = await appConfigDir();
-                const currentProfilePath = await join(configDir, CURRENT_PROFILE_FILE);
-                await writeTextFile(currentProfilePath, JSON.stringify({ profile: metadata.currentProfile }, null, 2));
-                console.log(`[ProfileManager] Updated current profile file to: ${metadata.currentProfile}`);
+                console.log(`[ProfileManager] Updated current profile in metadata to: ${metadata.currentProfile}`);
             }
         } else {
             console.log(`[ProfileManager] No changes detected in profile sync`);
@@ -431,13 +454,14 @@ export async function getProfiles(): Promise<ProfileMetadata> {
         const content = await readTextFile(metadataPath);
         metadata = JSON.parse(content) as ProfileMetadata;
     } catch {
+        const defaultProfileId = generateProfileId();
         metadata = {
             profiles: [{
-                id: DEFAULT_PROFILE_ID,
-                name: 'Predeterminado',
+                id: defaultProfileId,
+                name: DEFAULT_PROFILE_NAME,
                 created: new Date().toISOString()
             }],
-            currentProfile: DEFAULT_PROFILE_ID
+            currentProfile: defaultProfileId
         };
     }
 
@@ -449,10 +473,6 @@ export async function getProfiles(): Promise<ProfileMetadata> {
 
             // Save the corrected metadata
             await saveProfileMetadata(metadata);
-
-            // Also update current-profile.json
-            const currentProfilePath = await join(configDir, CURRENT_PROFILE_FILE);
-            await writeTextFile(currentProfilePath, JSON.stringify({ profile: metadata.currentProfile }, null, 2));
 
             // Add flag to metadata to indicate this profile was auto-selected
             (metadata as any)._needsProfileLoad = true;
@@ -467,62 +487,32 @@ export async function getCurrentProfile(): Promise<string> {
     await ensureProfilesStructure();
 
     const configDir = await appConfigDir();
-    const currentProfilePath = await join(configDir, CURRENT_PROFILE_FILE);
+    const metadataPath = await join(configDir, PROFILES_METADATA_FILE);
 
     try {
-        const content = await readTextFile(currentProfilePath);
-        const data = JSON.parse(content);
-        let profileId = data.profile || DEFAULT_PROFILE_ID;
+        const content = await readTextFile(metadataPath);
+        const metadata = JSON.parse(content) as ProfileMetadata;
 
-        // Verify that the current profile actually exists in metadata (without calling getProfiles to avoid circular dependency)
-        const metadataPath = await join(configDir, PROFILES_METADATA_FILE);
-        let profileExists = true;
+        // Verificar que el perfil actual existe
+        const currentProfile = metadata.currentProfile;
+        const profileExists = metadata.profiles.some(p => p.id === currentProfile);
 
-        try {
-            const metadataContent = await readTextFile(metadataPath);
-            const metadata = JSON.parse(metadataContent) as ProfileMetadata;
-            profileExists = metadata.profiles.some(p => p.id === profileId);
-        } catch {
-            // If metadata can't be read, assume profile exists to avoid issues
-            profileExists = true;
+        if (!profileExists && metadata.profiles.length > 0) {
+            // Si el perfil actual no existe, usar el primero disponible
+            metadata.currentProfile = metadata.profiles[0].id;
+            await saveProfileMetadata(metadata);
+            console.log(`[ProfileManager] Updated current profile to: ${metadata.currentProfile}`);
         }
 
-        if (!profileExists) {
-            console.warn(`[ProfileManager] Current profile ${profileId} doesn't exist, switching to first available`);
-            try {
-                const metadataContent = await readTextFile(metadataPath);
-                const metadata = JSON.parse(metadataContent) as ProfileMetadata;
-                if (metadata.profiles.length > 0) {
-                    profileId = metadata.profiles[0].id;
-                    // Update the current profile file
-                    await writeTextFile(currentProfilePath, JSON.stringify({ profile: profileId }, null, 2));
-                    console.log(`[ProfileManager] Updated current profile to: ${profileId}`);
-                } else {
-                    profileId = DEFAULT_PROFILE_ID;
-                }
-            } catch {
-                profileId = DEFAULT_PROFILE_ID;
-            }
-        }
-
+        const profileId = metadata.currentProfile || (metadata.profiles.length > 0 ? metadata.profiles[0].id : await getOrCreateDefaultProfileId());
         console.log(`[ProfileManager] Current profile: ${profileId}`);
         return profileId;
     } catch (err) {
-        console.warn(`[ProfileManager] Error reading current profile, getting from metadata`, err);
-
-        // Fallback: get from metadata
-        try {
-            const metadata = await getProfiles();
-            const profileId = metadata.currentProfile || (metadata.profiles.length > 0 ? metadata.profiles[0].id : DEFAULT_PROFILE_ID);
-
-            // Try to save it back to current profile file
-            await writeTextFile(currentProfilePath, JSON.stringify({ profile: profileId }, null, 2));
-            console.log(`[ProfileManager] Restored current profile file with: ${profileId}`);
-            return profileId;
-        } catch {
-            console.warn(`[ProfileManager] Complete fallback to default profile`);
-            return DEFAULT_PROFILE_ID;
-        }
+        console.warn(`[ProfileManager] Error reading profiles metadata, creating default`, err);
+        // Si no se puede leer metadata, crear perfil por defecto
+        const defaultProfileId = await getOrCreateDefaultProfileId();
+        await ensureProfilesStructure();
+        return defaultProfileId;
     }
 }
 
@@ -536,14 +526,11 @@ export async function setCurrentProfile(profileId: string): Promise<void> {
         throw new Error(`Profile ${profileId} not found`);
     }
 
-    const configDir = await appConfigDir();
-    const currentProfilePath = await join(configDir, CURRENT_PROFILE_FILE);
-
-    console.log(`[ProfileManager] Writing current profile to: ${currentProfilePath}`);
-    await writeTextFile(currentProfilePath, JSON.stringify({ profile: profileId }, null, 2));
-
+    // Actualizar perfil actual en metadata
+    metadata.currentProfile = profileId;
     profile.lastUsed = new Date().toISOString();
-    console.log(`[ProfileManager] Updated lastUsed for profile: ${profile.name}`);
+
+    console.log(`[ProfileManager] Updated current profile to: ${profileId} and lastUsed for profile: ${profile.name}`);
     await saveProfileMetadata(metadata);
 }
 
@@ -570,15 +557,13 @@ export async function createProfile(name: string, copyFromProfile?: string): Pro
     if (copyFromProfile) {
         // User wants to copy from an existing profile
         let sourceProfileDir: string;
-        if (copyFromProfile === DEFAULT_PROFILE_ID) {
-            sourceProfileDir = await join(profilesDir, 'default');
+        // Buscar perfil por ID para obtener su directorio
+        const sourceProfile = metadata.profiles.find(p => p.id === copyFromProfile);
+        if (sourceProfile) {
+            sourceProfileDir = await join(profilesDir, sanitizeProfileName(sourceProfile.name));
         } else {
-            const sourceProfile = metadata.profiles.find(p => p.id === copyFromProfile);
-            if (sourceProfile) {
-                sourceProfileDir = await join(profilesDir, sanitizeProfileName(sourceProfile.name));
-            } else {
-                sourceProfileDir = await join(profilesDir, copyFromProfile);
-            }
+            // Fallback: usar el ID como nombre de carpeta
+            sourceProfileDir = await join(profilesDir, copyFromProfile);
         }
 
         if (await exists(sourceProfileDir)) {
@@ -659,12 +644,7 @@ export async function duplicateProfile(profileId: string, newName: string): Prom
     await mkdir(profileDir, { recursive: true });
 
     // Get source profile directory
-    let sourceProfileDir: string;
-    if (profileId === DEFAULT_PROFILE_ID) {
-        sourceProfileDir = await join(profilesDir, 'default');
-    } else {
-        sourceProfileDir = await join(profilesDir, sanitizeProfileName(sourceProfile.name));
-    }
+    const sourceProfileDir = await join(profilesDir, sanitizeProfileName(sourceProfile.name));
 
     // Copy everything including save file for duplication
     if (await exists(sourceProfileDir)) {
@@ -846,8 +826,70 @@ function generateProfileId(): string {
     return crypto.randomUUID();
 }
 
+// Migra estructura antigua a nueva
+export async function migrateProfileStructure(): Promise<void> {
+    const configDir = await appConfigDir();
+
+    // 1. Migrar current-profile.json a profiles.json si existe
+    const currentProfilePath = await join(configDir, 'current-profile.json');
+    if (await exists(currentProfilePath)) {
+        try {
+            const content = await readTextFile(currentProfilePath);
+            const data = JSON.parse(content);
+            const profileId = data.profile;
+
+            // Actualizar profiles.json
+            const metadataPath = await join(configDir, PROFILES_METADATA_FILE);
+            if (await exists(metadataPath)) {
+                const metadataContent = await readTextFile(metadataPath);
+                const metadata = JSON.parse(metadataContent) as ProfileMetadata;
+
+                // Si el profileId es 'default', buscar el perfil por defecto por nombre
+                if (profileId === 'default') {
+                    const defaultProfile = metadata.profiles.find(p => p.name === DEFAULT_PROFILE_NAME);
+                    if (defaultProfile) {
+                        metadata.currentProfile = defaultProfile.id;
+                        console.log(`[ProfileManager] Migrated 'default' ID to random ID: ${defaultProfile.id}`);
+                    } else {
+                        // Si no existe el perfil por defecto, usar el primer perfil disponible
+                        if (metadata.profiles.length > 0) {
+                            metadata.currentProfile = metadata.profiles[0].id;
+                        }
+                    }
+                } else {
+                    metadata.currentProfile = profileId;
+                }
+
+                await saveProfileMetadata(metadata);
+                console.log(`[ProfileManager] Migrated current profile from current-profile.json to profiles.json`);
+            }
+
+            // Eliminar current-profile.json
+            await remove(currentProfilePath);
+            console.log(`[ProfileManager] Removed obsolete current-profile.json`);
+        } catch (err) {
+            console.warn(`[ProfileManager] Error migrating current-profile.json:`, err);
+        }
+    }
+
+    // 2. Migrar carpeta 'default' a 'Predeterminado' si existe
+    const profilesDir = await getProfilesDir();
+    const oldDefaultDir = await join(profilesDir, 'default');
+    const newDefaultDir = await join(profilesDir, DEFAULT_PROFILE_NAME);
+
+    if (await exists(oldDefaultDir) && !(await exists(newDefaultDir))) {
+        try {
+            await rename(oldDefaultDir, newDefaultDir);
+            console.log(`[ProfileManager] Migrated default profile folder from 'default' to '${DEFAULT_PROFILE_NAME}'`);
+        } catch (err) {
+            console.warn(`[ProfileManager] Error migrating default profile folder:`, err);
+        }
+    }
+}
+
 export async function migrateExistingConfig(): Promise<void> {
     await ensureProfilesStructure();
+    await migrateProfileStructure();
 
     const configDir = await appConfigDir();
     const oldConfigPath = await join(configDir, 'config.json');
@@ -856,7 +898,7 @@ export async function migrateExistingConfig(): Promise<void> {
 
     // Use direct path construction to avoid recursion
     const profilesDir = await getProfilesDir();
-    const defaultProfileDir = await join(profilesDir, 'default');
+    const defaultProfileDir = await join(profilesDir, DEFAULT_PROFILE_NAME);
     await mkdir(defaultProfileDir, { recursive: true });
 
     const newConfigPath = await join(defaultProfileDir, 'config.json');
