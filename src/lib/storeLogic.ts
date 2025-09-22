@@ -1,281 +1,339 @@
 import type { AppConfig, Pokemon, Tier } from '../types';
 import { sampleWithoutReplacement } from './random';
 
-// ---- Utilidades base ----
-export function byRegion(p: Pokemon, region: string) {
-    return p.regiones
+// ================= Utilidades Base =================
+
+// Verifica si un pokémon pertenece a una región específica
+export function byRegion(pokemon: Pokemon, region: string): boolean {
+    return pokemon.regiones
         .map((r) => r.toLowerCase())
         .includes(region.toLowerCase());
 }
 
-// Prioridad: S (mayor), luego A, B… Z (menor)
-export function tierPriority(t: string): number {
-    const u = t.toUpperCase();
-    if (u === 'S') return 100;
-    const code = u.charCodeAt(0);
-    if (code >= 65 && code <= 90) return 90 - (code - 65); // A=90..Z=65
+// Calcula la prioridad numérica de un tier (S=mayor, Z=menor)
+export function tierPriority(tier: string): number {
+    const upperTier = tier.toUpperCase();
+    if (upperTier === 'S') return 100;
+
+    const charCode = upperTier.charCodeAt(0);
+    if (charCode >= 65 && charCode <= 90) {
+        return 90 - (charCode - 65); // A=90, B=89, ..., Z=65
+    }
     return 0;
 }
+
+// Ordena tiers de mayor a menor prioridad (S, A, B, C...)
 export const sortTiersDesc = (tiers: string[]) =>
     [...tiers].sort((a, b) => tierPriority(b) - tierPriority(a));
+
+// Ordena tiers de menor a mayor prioridad (Z, Y, X... C, B, A, S)
 export const sortTiersAsc = (tiers: string[]) =>
     [...tiers].sort((a, b) => tierPriority(a) - tierPriority(b));
 
+// ================= Normalización de Cuotas =================
+
+// Normaliza las cuotas de tier para ajustarse al tamaño de la tienda
 export function normalizeQuota(
-    raw: Record<string, number>,
+    rawQuota: Record<string, number>,
     shopSize: number
 ): Record<string, number> {
-    const q: Record<string, number> = {};
-    for (const [k, v] of Object.entries(raw))
-        q[k.toUpperCase()] = Math.max(0, Math.floor(v || 0));
-    let tiers = Object.keys(q);
+    // Normalizar claves y valores
+    const quota: Record<string, number> = {};
+    for (const [tier, count] of Object.entries(rawQuota)) {
+        quota[tier.toUpperCase()] = Math.max(0, Math.floor(count || 0));
+    }
+
+    const tiers = Object.keys(quota);
     if (tiers.length === 0) return { C: shopSize };
-    let sum = tiers.reduce((s, t) => s + (q[t] || 0), 0);
-    if (sum === shopSize) return q;
-    if (sum > shopSize) {
-        let over = sum - shopSize;
-        for (const t of sortTiersAsc(tiers)) {
-            if (over <= 0) break;
-            const take = Math.min(over, q[t]);
-            q[t] -= take;
-            over -= take;
+
+    const totalAssigned = tiers.reduce((sum, tier) => sum + (quota[tier] || 0), 0);
+
+    if (totalAssigned === shopSize) {
+        return quota;
+    }
+
+    if (totalAssigned > shopSize) {
+        // Reducir cuotas empezando por los tiers de menor prioridad
+        let excess = totalAssigned - shopSize;
+        for (const tier of sortTiersAsc(tiers)) {
+            if (excess <= 0) break;
+            const reduction = Math.min(excess, quota[tier]);
+            quota[tier] -= reduction;
+            excess -= reduction;
         }
     } else {
-        const deficit = shopSize - sum;
-        const lowest = sortTiersAsc(tiers)[0];
-        q[lowest] = (q[lowest] || 0) + deficit;
+        // Añadir el déficit al tier de menor prioridad
+        const deficit = shopSize - totalAssigned;
+        const lowestTier = sortTiersAsc(tiers)[0];
+        quota[lowestTier] = (quota[lowestTier] || 0) + deficit;
     }
-    for (const t of Object.keys(q)) if (q[t] <= 0) delete q[t];
-    return q;
+
+    // Eliminar tiers con cuota 0
+    for (const tier of Object.keys(quota)) {
+        if (quota[tier] <= 0) delete quota[tier];
+    }
+
+    return quota;
 }
 
-// ---- Novedad: mínimos + pesos ----
+// ================= Sistema de Mínimos y Pesos =================
 
-// MinQuota: normaliza claves y asegura enteros >= 0; NO ajusta a shopSize
+// Normaliza cuotas mínimas: asegura enteros >= 0, NO ajusta al tamaño de tienda
 function normalizeMinQuota(
-    raw: Record<string, number> | undefined
+    rawMinQuota: Record<string, number> | undefined
 ): Record<string, number> {
-    const out: Record<string, number> = {};
-    if (!raw) return out;
-    for (const [k, v] of Object.entries(raw)) {
-        const K = String(k).toUpperCase();
-        const n = Math.max(0, Math.floor(Number(v) || 0));
-        if (n > 0) out[K] = n;
+    const minQuota: Record<string, number> = {};
+    if (!rawMinQuota) return minQuota;
+
+    for (const [tier, count] of Object.entries(rawMinQuota)) {
+        const normalizedTier = String(tier).toUpperCase();
+        const normalizedCount = Math.max(0, Math.floor(Number(count) || 0));
+        if (normalizedCount > 0) {
+            minQuota[normalizedTier] = normalizedCount;
+        }
     }
-    return out;
+    return minQuota;
 }
 
-// Pesos: normaliza y garantiza algo razonable si suman 0
+// Normaliza pesos de tier y garantiza valores válidos
 function normalizeWeights(
-    raw: Record<string, number> | undefined
+    rawWeights: Record<string, number> | undefined
 ): Record<string, number> {
-    const base = { C: 40, B: 30, A: 20, S: 10 };
-    const merged = { ...base, ...(raw || {}) };
-    const out: Record<string, number> = {};
-    let sum = 0;
-    for (const [k, v] of Object.entries(merged)) {
-        const K = String(k).toUpperCase();
-        const n = Math.max(0, Number(v) || 0);
-        out[K] = n;
-        sum += n;
+    const defaultWeights = { C: 40, B: 30, A: 20, S: 10 };
+    const merged = { ...defaultWeights, ...(rawWeights || {}) };
+    const weights: Record<string, number> = {};
+    let totalWeight = 0;
+
+    for (const [tier, weight] of Object.entries(merged)) {
+        const normalizedTier = String(tier).toUpperCase();
+        const normalizedWeight = Math.max(0, Number(weight) || 0);
+        weights[normalizedTier] = normalizedWeight;
+        totalWeight += normalizedWeight;
     }
-    if (sum === 0) {
-        // fallback
+
+    // Si todos los pesos son 0, usar valores por defecto
+    if (totalWeight === 0) {
         return { C: 40, B: 30, A: 20, S: 10 };
     }
-    return out;
+
+    return weights;
 }
 
-// Elige un tier aleatorio según pesos
+// Selecciona un tier aleatorio basado en pesos probabilísticos
 function pickWeightedTier(
-    candidates: string[],
+    candidateTiers: string[],
     weights: Record<string, number>
 ): string {
-    const totals = candidates.map((t) => Math.max(0, weights[t] || 0));
-    const sum = totals.reduce((s, n) => s + n, 0);
-    if (sum <= 0) {
-        // todo 0 → elige el de mayor prioridad
-        return sortTiersDesc(candidates)[0];
+    const tierWeights = candidateTiers.map((tier) => Math.max(0, weights[tier] || 0));
+    const totalWeight = tierWeights.reduce((sum, weight) => sum + weight, 0);
+
+    if (totalWeight <= 0) {
+        // Si no hay pesos válidos, elegir el tier de mayor prioridad
+        return sortTiersDesc(candidateTiers)[0];
     }
-    let r = Math.random() * sum;
-    for (let i = 0; i < candidates.length; i++) {
-        r -= totals[i];
-        if (r <= 0) return candidates[i];
+
+    let randomValue = Math.random() * totalWeight;
+    for (let i = 0; i < candidateTiers.length; i++) {
+        randomValue -= tierWeights[i];
+        if (randomValue <= 0) return candidateTiers[i];
     }
-    return candidates[candidates.length - 1];
+
+    return candidateTiers[candidateTiers.length - 1];
 }
 
-// Calcula cuántos por tier: primero mínimos, luego pesos para el resto
+// Calcula la cantidad de pokémon por tier: primero mínimos garantizados, luego distribución por pesos
 function computeTierCounts(
     shopSize: number,
     minQuota: Record<string, number>,
     weights: Record<string, number>
 ): Record<string, number> {
     const counts: Record<string, number> = { ...minQuota };
-    const tiersUniverse = Array.from(
+    const allTiers = Array.from(
         new Set([...Object.keys(minQuota), ...Object.keys(weights)])
     );
 
-    const guaranteed = Object.values(minQuota).reduce((s, n) => s + n, 0);
-    let remaining = Math.max(0, shopSize - guaranteed);
+    const guaranteedTotal = Object.values(minQuota).reduce((sum, count) => sum + count, 0);
+    const remainingSlots = Math.max(0, shopSize - guaranteedTotal);
 
-    if (remaining > 0) {
-        // repartimos 1 a 1 por muestreo ponderado
-        for (let i = 0; i < remaining; i++) {
-            const t = pickWeightedTier(tiersUniverse, weights);
-            counts[t] = (counts[t] || 0) + 1;
-        }
+    // Distribuir slots restantes usando pesos probabilísticos
+    for (let i = 0; i < remainingSlots; i++) {
+        const selectedTier = pickWeightedTier(allTiers, weights);
+        counts[selectedTier] = (counts[selectedTier] || 0) + 1;
     }
+
     return counts;
 }
 
-// ---- Generación de tienda con huecos y reglas existentes ----
+// ================= Generación de Tienda =================
 
 /**
- * Genera la tienda para una región:
- * - Respeta mínimos (quota) y rellena el resto con pesos (tierWeights).
- * - Ordena por mejor→peor tier.
- * - Evita duplicados si allowDuplicates=false.
- * - Excluye comprados del pool si includePurchasedInRerollPool=false.
- * - Si falta stock en un tier, rellena con huecos (id = -1) manteniendo tamaño.
+ * Genera la tienda de pokémon para una región específica.
+ *
+ * Características:
+ * - Respeta cuotas mínimas y distribuye el resto usando pesos de tier
+ * - Ordena pokémon de mejor a peor tier (S → A → B → C...)
+ * - Evita duplicados si allowDuplicates=false
+ * - Excluye pokémon comprados si includePurchasedInRerollPool=false
+ * - Rellena con huecos vacíos (id = -1) si no hay suficientes pokémon
  */
 
 export function buildShopForRegion(
-    all: Pokemon[],
+    allPokemon: Pokemon[],
     region: string,
-    cfg: AppConfig,
+    config: AppConfig,
     purchasedIds: Set<number>
 ): Pokemon[] {
-    const regionPool = all.filter((p) => byRegion(p, region));
+    // Filtrar pokémon disponibles en la región
+    const regionPool = allPokemon.filter((pokemon) => byRegion(pokemon, region));
 
-    // 1) mínimos y pesos
-    const minQuota = normalizeMinQuota(cfg.quota);
-    const weights = normalizeWeights(cfg.tierWeights);
-    const counts = computeTierCounts(cfg.shopSize, minQuota, weights);
+    // Calcular distribución de tiers
+    const minQuota = normalizeMinQuota(config.quota);
+    const weights = normalizeWeights(config.tierWeights);
+    const tierCounts = computeTierCounts(config.shopSize, minQuota, weights);
 
-    // 2) iterar por tiers de mayor a menor prioridad
-    const tiersDesc = sortTiersDesc(Object.keys(counts));
-    const result: (Pokemon & { __uid?: string })[] = [];
+    // Procesar tiers de mayor a menor prioridad (S → A → B → C...)
+    const tiersByPriority = sortTiersDesc(Object.keys(tierCounts));
+    const shopResult: (Pokemon & { __uid?: string })[] = [];
 
-    for (const tier of tiersDesc) {
-        const need = Math.max(0, counts[tier] || 0);
-        if (need <= 0) continue;
+    for (const currentTier of tiersByPriority) {
+        const requiredCount = Math.max(0, tierCounts[currentTier] || 0);
+        if (requiredCount <= 0) continue;
 
-        // Pool por tier
+        // Crear pool de pokémon para este tier
         let tierPool = regionPool
-            .filter((p) => String(p.tier).toUpperCase() === tier)
-            .map((p) => ({ ...p } as Pokemon & { __uid?: string }));
+            .filter((pokemon) => String(pokemon.tier).toUpperCase() === currentTier)
+            .map((pokemon) => ({ ...pokemon } as Pokemon & { __uid?: string }));
 
-        // Excluir comprados si así se configuró
-        if (!cfg.includePurchasedInRerollPool) {
-            tierPool = tierPool.filter((p) => !purchasedIds.has(p.id));
+        // Excluir pokémon ya comprados si está configurado así
+        if (!config.includePurchasedInRerollPool) {
+            tierPool = tierPool.filter((pokemon) => !purchasedIds.has(pokemon.id));
         }
 
-        // Si permiten duplicados y hay pocos, se puede clonar para alcanzar need
-        if (cfg.allowDuplicates) {
-            while (tierPool.length < need && tierPool.length > 0) {
-                const sample =
-                    tierPool[Math.floor(Math.random() * tierPool.length)];
-                tierPool.push({ ...sample });
+        // Manejar duplicados según configuración
+        if (config.allowDuplicates) {
+            // Clonar pokémon existentes si se necesitan más
+            while (tierPool.length < requiredCount && tierPool.length > 0) {
+                const randomPokemon = tierPool[Math.floor(Math.random() * tierPool.length)];
+                tierPool.push({ ...randomPokemon });
             }
-        }
+        } else {
+            // Marcar duplicados como huecos
+            const usedIds = new Set(shopResult.map((pokemon) => pokemon?.id));
+            const seenIds = new Set<number>();
 
-        // Si NO permiten duplicados, marcaremos como huecos los sobrantes
-        if (!cfg.allowDuplicates) {
-            const usedIds = new Set(result.map((r) => r?.id));
-            const seen = new Set<number>();
-            tierPool.forEach((p) => {
-                const dupInside = seen.has(p.id);
-                const already = usedIds.has(p.id);
-                if (dupInside || already) {
-                    p.id = -1; // marcar hueco
+            tierPool.forEach((pokemon) => {
+                const isDuplicateInTier = seenIds.has(pokemon.id);
+                const isAlreadyInShop = usedIds.has(pokemon.id);
+
+                if (isDuplicateInTier || isAlreadyInShop) {
+                    pokemon.id = -1; // Marcar como hueco
                 } else {
-                    seen.add(p.id);
+                    seenIds.add(pokemon.id);
                 }
             });
         }
 
-        // Asignar UID a huecos para distinguirlos
-        tierPool = tierPool.map((p) =>
-            p.__uid ? p : { ...p, __uid: crypto.randomUUID() }
+        // Asignar UIDs únicos para distinguir huecos
+        tierPool = tierPool.map((pokemon) =>
+            pokemon.__uid ? pokemon : { ...pokemon, __uid: crypto.randomUUID() }
         );
 
-        // Comparador: -1 por uid; los demás por id
-        const equals = (
+        // Función para comparar pokémon (incluyendo huecos)
+        const pokemonEquals = (
             a: Pokemon & { __uid?: string },
             b: Pokemon & { __uid?: string }
         ) => {
-            const aHole = a?.id === -1;
-            const bHole = b?.id === -1;
-            return aHole && bHole ? a.__uid === b.__uid : a?.id === b?.id;
+            const isAHole = a?.id === -1;
+            const isBHole = b?.id === -1;
+            return isAHole && isBHole ? a.__uid === b.__uid : a?.id === b?.id;
         };
 
-        // Seleccionar hasta 'need' elementos priorizando reales y luego huecos
-        if (need > 0) {
-            const realPool = tierPool.filter((p) => p.id !== -1);
-            const holePool = tierPool.filter((p) => p.id === -1);
+        // Seleccionar pokémon para la tienda
+        if (requiredCount > 0) {
+            const realPokemon = tierPool.filter((pokemon) => pokemon.id !== -1);
+            const holePokemon = tierPool.filter((pokemon) => pokemon.id === -1);
+            const selectedPokemon: (Pokemon & { __uid?: string })[] = [];
 
-            const picked: (Pokemon & { __uid?: string })[] = [];
-
-            const takeReal = Math.min(need, realPool.length);
-            if (takeReal > 0) {
+            // Priorizar pokémon reales
+            const realCount = Math.min(requiredCount, realPokemon.length);
+            if (realCount > 0) {
                 const pickedReal = sampleWithoutReplacement(
-                    realPool,
-                    takeReal,
-                    equals,
-                    result
+                    realPokemon,
+                    realCount,
+                    pokemonEquals,
+                    shopResult
                 );
-                picked.push(...pickedReal);
+                selectedPokemon.push(...pickedReal);
             }
 
-            const remaining = need - picked.length;
-            if (remaining > 0) {
-                // si no hay suficientes reales, intentamos huecos (-1) para completar tamaño
+            // Completar con huecos si es necesario
+            const remainingSlots = requiredCount - selectedPokemon.length;
+            if (remainingSlots > 0) {
                 const pickedHoles = sampleWithoutReplacement(
-                    holePool,
-                    Math.min(remaining, holePool.length),
-                    equals,
-                    result.concat(picked)
+                    holePokemon,
+                    Math.min(remainingSlots, holePokemon.length),
+                    pokemonEquals,
+                    shopResult.concat(selectedPokemon)
                 );
-                picked.push(...pickedHoles);
+                selectedPokemon.push(...pickedHoles);
             }
 
-            // Si aún faltan (pool vacío), creamos huecos sintéticos
-            while (picked.length < need) {
-                picked.push({
+            // Crear huecos sintéticos si aún faltan slots
+            while (selectedPokemon.length < requiredCount) {
+                selectedPokemon.push({
                     id: -1,
                     nombre: '—',
-                    tier,
+                    tier: currentTier,
                     precio: 0,
                     regiones: [region],
                     __uid: crypto.randomUUID(),
                 });
             }
 
-            result.push(...picked);
+            shopResult.push(...selectedPokemon);
         }
     }
 
-    return result;
+    return shopResult;
 }
 
+// ================= Sistema de Reroll =================
+
+// Busca un pokémon candidato válido para reemplazar en un reroll
 export function findRerollCandidate(
-    all: Pokemon[],
+    allPokemon: Pokemon[],
     region: string,
     tier: Tier,
     usedIds: Set<number>,
     purchasedIds: Set<number>,
-    forbidId: number | null,
-    cfg: AppConfig
+    forbiddenId: number | null,
+    config: AppConfig
 ): Pokemon | null {
-    const t = String(tier).toUpperCase();
-    let pool = all.filter(
-        (p) => byRegion(p, region) && p.tier.toUpperCase() === t
+    const targetTier = String(tier).toUpperCase();
+
+    // Filtrar candidatos por región y tier
+    let candidatePool = allPokemon.filter(
+        (pokemon) => byRegion(pokemon, region) && pokemon.tier.toUpperCase() === targetTier
     );
-    if (!cfg.includePurchasedInRerollPool)
-        pool = pool.filter((p) => !purchasedIds.has(p.id));
-    if (!cfg.allowDuplicates) pool = pool.filter((p) => !usedIds.has(p.id));
-    if (forbidId != null) pool = pool.filter((p) => p.id !== forbidId); // no rerollear al mismo
-    if (pool.length === 0) return null;
-    return pool[Math.floor(Math.random() * pool.length)];
+
+    // Excluir pokémon comprados si está configurado así
+    if (!config.includePurchasedInRerollPool) {
+        candidatePool = candidatePool.filter((pokemon) => !purchasedIds.has(pokemon.id));
+    }
+
+    // Excluir duplicados si no están permitidos
+    if (!config.allowDuplicates) {
+        candidatePool = candidatePool.filter((pokemon) => !usedIds.has(pokemon.id));
+    }
+
+    // Excluir el pokémon actual que se está rerolleando
+    if (forbiddenId != null) {
+        candidatePool = candidatePool.filter((pokemon) => pokemon.id !== forbiddenId);
+    }
+
+    // Si no hay candidatos válidos, retornar null
+    if (candidatePool.length === 0) return null;
+
+    // Seleccionar candidato aleatorio
+    return candidatePool[Math.floor(Math.random() * candidatePool.length)];
 }

@@ -1,54 +1,64 @@
-export type Tier = string; // dinámico: S, A, B, C… Z
+// Tipo dinámico para representar tiers: S, A, B, C... Z
+export type Tier = string;
+
+// Estructura base de un pokémon
 export interface Pokemon {
-    id: number;
-    nombre: string;
-    tier: Tier;
-    precio: number;
-    regiones: string[];
+    id: number; // identificador único
+    nombre: string; // nombre del pokémon
+    tier: Tier; // clasificación de poder
+    precio: number; // costo en la tienda
+    regiones: string[]; // regiones donde aparece
 }
+
+// Pokémon en la tienda con estados adicionales
 export interface ShopPokemon extends Pokemon {
-    __purchased?: boolean;
-    __exhausted?: boolean;
+    __purchased?: boolean; // marcado como comprado
+    __exhausted?: boolean; // temporalmente agotado (sin candidatos para reroll)
 }
 
+// Tipos de eventos en el historial de acciones
 export type HistoryEventType =
-    | 'money:add'
-    | 'money:subtract'
-    | 'buy'
-    | 'reroll'
-    | 'region:next'
-    | 'region:prev'
-    | 'refresh'
-    | 'reset'
-    | 'undo';
+    | 'money:add' // añadir dinero
+    | 'money:subtract' // restar dinero
+    | 'buy' // comprar pokémon
+    | 'reroll' // rerollear slot
+    | 'region:next' // navegar a siguiente región
+    | 'region:prev' // navegar a región anterior
+    | 'refresh' // actualizar tienda
+    | 'reset' // reiniciar todo
+    | 'undo'; // deshacer acción
+
+// Entrada del historial de acciones
 export interface HistoryEvent {
-    id: string;
-    ts: string;
-    type: HistoryEventType;
-    message: string;
-    meta?: Record<string, unknown>;
+    id: string; // identificador único
+    ts: string; // timestamp ISO
+    type: HistoryEventType; // tipo de evento
+    message: string; // descripción legible
+    meta?: Record<string, unknown>; // metadatos opcionales
 }
 
+// Registro de una compra realizada
 export interface PurchaseItem {
-    id: string;
-    ts: string;
-    region: string;
-    pokemonId: number;
-    nombre: string;
-    tier: Tier;
-    precio: number;
+    id: string; // identificador único
+    ts: string; // timestamp de compra
+    region: string; // región donde se compró
+    pokemonId: number; // ID del pokémon comprado
+    nombre: string; // nombre del pokémon
+    tier: Tier; // tier del pokémon
+    precio: number; // precio pagado
 }
 
+// Instantánea del estado para sistema de deshacer
 export interface Snapshot {
-    currentRegionIndex: number;
-    selectedRegionIndex: number;
-    selectedShopIndex: number;
-    shop: ShopPokemon[];
-    shopByIndex: Record<number, ShopPokemon[]>;
-    rerollsUsedGlobal: number;
-    money: number;
-    purchases: PurchaseItem[];
-    history: HistoryEvent[]; // se conserva pero NO se modifica al hacer undo
+    currentRegionIndex: number; // índice de región activa
+    selectedRegionIndex: number; // índice de región seleccionada
+    selectedShopIndex: number; // índice de tienda seleccionada
+    shop: ShopPokemon[]; // tienda actual
+    shopByIndex: Record<number, ShopPokemon[]>; // tiendas por índice
+    rerollsUsedGlobal: number; // rerolls utilizados
+    money: number; // dinero actual
+    purchases: PurchaseItem[]; // compras realizadas
+    history: HistoryEvent[]; // historial (se conserva en undo)
 }
 
 export interface AppConfig {

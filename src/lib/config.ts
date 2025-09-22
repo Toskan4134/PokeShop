@@ -18,6 +18,7 @@ import { ensureSpritesDir } from './sprites';
 import defaultConfigJson from '../data/config.json';
 import defaultPokemonJson from '../data/pokemon.json';
 
+// Desenvuelve un objeto JSON que puede venir envuelto en un módulo ES6
 function unwrapJson<T>(modOrObj: any): T {
     if (modOrObj && typeof modOrObj === 'object' && 'default' in modOrObj) {
         return modOrObj.default as T;
@@ -25,221 +26,163 @@ function unwrapJson<T>(modOrObj: any): T {
     return modOrObj as T;
 }
 
-export const DEFAULT_CONFIG: AppConfig =
-    unwrapJson<AppConfig>(defaultConfigJson);
-export const DEFAULT_POKEMON: Pokemon[] =
-    unwrapJson<Pokemon[]>(defaultPokemonJson);
+// Configuración y datos por defecto
+export const DEFAULT_CONFIG: AppConfig = unwrapJson<AppConfig>(defaultConfigJson);
+export const DEFAULT_POKEMON: Pokemon[] = unwrapJson<Pokemon[]>(defaultPokemonJson);
 
-const isTauri =
-    typeof window !== 'undefined' &&
+// Detecta si la aplicación está ejecutándose en Tauri (desktop) o en web
+const isTauri = typeof window !== 'undefined' &&
     ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
 
+// Combina la configuración personalizada con los valores por defecto
 function mergeConfigDefaults(cfg: Partial<AppConfig> | undefined): AppConfig {
     const base = DEFAULT_CONFIG;
     const input = cfg ?? ({} as Partial<AppConfig>);
+
     return {
         ...base,
         ...input,
         tierColors: { ...(base.tierColors || {}), ...(input.tierColors || {}) },
-        tierWeights: {
-            ...(base.tierWeights || {}),
-            ...(input.tierWeights || {}),
-        },
+        tierWeights: { ...(base.tierWeights || {}), ...(input.tierWeights || {}) },
     };
 }
 
-async function readAndUnwrapConfigFile(
-    configPath: string,
-    rewrite = false
-): Promise<AppConfig> {
-    console.log(`[Config] readAndUnwrapConfigFile called with: ${configPath}, rewrite: ${rewrite}`);
+// Lee y procesa un archivo de configuración desde disco
+async function readAndUnwrapConfigFile(configPath: string, rewrite = false): Promise<AppConfig> {
     try {
         const raw = await readTextFile(configPath);
-        console.log(`[Config] Read config file content (${raw.length} chars): ${raw.substring(0, 200)}...`);
         let parsed: any;
+
         try {
             parsed = JSON.parse(raw);
-            console.log(`[Config] Parsed config in readAndUnwrapConfigFile:`, parsed);
         } catch (parseErr) {
-            console.error(`[Config] JSON parse error in readAndUnwrapConfigFile:`, parseErr);
-            // Si el archivo está corrupto, reemplaza por DEFAULT
+            console.error(`[Config] Error al parsear JSON:`, parseErr);
             return DEFAULT_CONFIG;
         }
 
         const unwrapped = unwrapJson<AppConfig>(parsed);
-        console.log(`[Config] Unwrapped config:`, unwrapped);
 
-        if (
-            rewrite &&
-            parsed &&
-            typeof parsed === 'object' &&
-            'default' in parsed
-        ) {
-            console.log(`[Config] Rewriting config file to fix format`);
-            // Repara el archivo sobre disco (opcional)
+        // Si está envuelto en 'default', reescribir el archivo para corregir formato
+        if (rewrite && parsed && typeof parsed === 'object' && 'default' in parsed) {
+            console.log(`[Config] Corrigiendo formato del archivo de configuración`);
             await writeTextFile(configPath, JSON.stringify(unwrapped, null, 2));
         }
 
-        const final = mergeConfigDefaults(unwrapped);
-        console.log(`[Config] Final merged config:`, final);
-        return final;
-    } catch (readErr) {
-        console.error(`[Config] Error reading config file in readAndUnwrapConfigFile:`, readErr);
+        return mergeConfigDefaults(unwrapped);
+    } catch (error) {
+        console.error(`[Config] Error al leer configuración:`, error);
         return DEFAULT_CONFIG;
     }
 }
 
+// Asegura que existen los archivos de configuración y datos para el perfil actual
 export async function ensureConfigFiles(): Promise<{
     configPath: string;
     dataPath: string;
     dir: string;
 }> {
-    console.log(`[Config] ensureConfigFiles called`);
+    // Preparar estructura de perfiles
     await ensureProfilesStructure();
     await migrateExistingConfig();
 
+    // Obtener directorio del perfil actual
     const currentProfileId = await getCurrentProfile();
-    console.log(`[Config] Current profile ID: ${currentProfileId}`);
     const dir = await getProfileDir(currentProfileId);
-    console.log(`[Config] Profile directory: ${dir}`);
 
-    const dirExists = await exists(dir);
-    console.log(`[Config] Profile directory exists: ${dirExists}`);
-    if (!dirExists) {
-        console.log(`[Config] Creating profile directory: ${dir}`);
+    // Crear directorio si no existe
+    if (!(await exists(dir))) {
         await mkdir(dir, { recursive: true });
-        console.log(`[Config] Created profile directory successfully`);
-    } else {
-        console.log(`[Config] Profile directory already exists`);
     }
 
     const configPath = await join(dir, 'config.json');
     const dataPath = await join(dir, DEFAULT_CONFIG.dataFile);
-    console.log(`[Config] Config path: ${configPath}`);
-    console.log(`[Config] Data path: ${dataPath}`);
 
-    console.log(`[Config] Checking if config file exists: ${configPath}`);
-    const configExists = await exists(configPath);
-    console.log(`[Config] Config file exists: ${configExists}`);
-
-    if (!configExists) {
-        console.log(`[Config] Creating new config.json at: ${configPath}`);
-        await writeTextFile(
-            configPath,
-            JSON.stringify(DEFAULT_CONFIG, null, 2)
-        );
-        console.log(`[Config] Created new config.json successfully`);
+    // Crear archivo de configuración si no existe
+    if (!(await exists(configPath))) {
+        await writeTextFile(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2));
     } else {
-        console.log(`[Config] Config file exists, attempting to read from: ${configPath}`);
+        // Verificar y corregir formato del archivo existente
         try {
-            // Test permissions first
-            console.log(`[Config] Testing file access permissions...`);
-            const canRead = await exists(configPath).catch(err => {
-                console.error(`[Config] Permission test failed:`, err);
-                return false;
-            });
-
-            if (!canRead) {
-                console.error(`[Config] Cannot access config file due to permissions, using default config`);
-                return { configPath, dataPath, dir };
-            }
-
-            console.log(`[Config] Permission test passed, reading file...`);
             const raw = await readTextFile(configPath);
-            console.log(`[Config] Raw config content length: ${raw.length} characters`);
-            console.log(`[Config] Raw config content: ${raw}`);
-            try {
-                const parsed = JSON.parse(raw);
-                console.log(`[Config] Parsed config successfully:`, parsed);
-                if (parsed && typeof parsed === 'object' && 'default' in parsed) {
-                    console.log(`[Config] Fixing config format - removing 'default' wrapper`);
-                    const fixed = unwrapJson<AppConfig>(parsed);
-                    await writeTextFile(configPath, JSON.stringify(fixed, null, 2));
-                    console.log(`[Config] Fixed config format and saved`);
-                } else {
-                    console.log(`[Config] Config format is already correct`);
-                }
-            } catch (parseErr) {
-                console.error(`[Config] Error parsing config JSON:`, parseErr);
+            const parsed = JSON.parse(raw);
+
+            // Si está envuelto en 'default', corregir formato
+            if (parsed && typeof parsed === 'object' && 'default' in parsed) {
+                const fixed = unwrapJson<AppConfig>(parsed);
+                await writeTextFile(configPath, JSON.stringify(fixed, null, 2));
             }
-        } catch (readErr) {
-            console.error(`[Config] Error reading config file:`, readErr);
-            console.log(`[Config] Will use default config due to read error`);
+        } catch (error) {
+            console.error(`[Config] Error procesando archivo de configuración:`, error);
         }
     }
 
+    // Crear archivo de datos de pokémon si no existe
     if (!(await exists(dataPath))) {
-        console.log(`[Config] Creating new pokemon data file`);
         await writeTextFile(dataPath, JSON.stringify(DEFAULT_POKEMON, null, 2));
-    } else {
-        console.log(`[Config] Pokemon data file exists`);
     }
 
     await ensureSpritesDir();
     return { configPath, dataPath, dir };
 }
 
+// Carga la configuración de la aplicación
 export async function loadConfig(): Promise<AppConfig> {
-    console.log(`[Config] loadConfig called`);
     if (!isTauri) {
-        console.log(`[Config] Running in web mode`);
+        // Modo web: intentar cargar desde servidor
         try {
             const res = await fetch('/config.json');
             if (res.ok) {
                 const json = await res.json();
-                console.log(`[Config] Loaded config from web`);
                 return mergeConfigDefaults(unwrapJson<AppConfig>(json));
             }
-            console.log(`[Config] Web config not found, using default`);
             return DEFAULT_CONFIG;
-        } catch (err) {
-            console.warn(`[Config] Error loading web config:`, err);
+        } catch (error) {
+            console.warn(`[Config] Error cargando configuración web:`, error);
             return DEFAULT_CONFIG;
         }
     }
-    console.log(`[Config] Running in Tauri mode`);
+
+    // Modo Tauri: cargar desde sistema de archivos
     const { configPath } = await ensureConfigFiles();
-    console.log(`[Config] Loading config from: ${configPath}`);
-    const config = await readAndUnwrapConfigFile(configPath, true);
-    console.log(`[Config] Loaded config:`, config);
-    return config;
+    return await readAndUnwrapConfigFile(configPath, true);
 }
 
+// Carga los datos de pokémon desde el archivo especificado en la configuración
 export async function loadPokemonData(cfg: AppConfig): Promise<Pokemon[]> {
-    console.log(`[Config] loadPokemonData called with dataFile: ${cfg.dataFile}`);
     if (!isTauri) {
-        console.log(`[Config] Loading pokemon data in web mode`);
+        // Modo web: intentar cargar desde servidor
         try {
             const res = await fetch('/pokemon.json');
             if (res.ok) {
                 const json = await res.json();
-                console.log(`[Config] Loaded pokemon data from web`);
                 return unwrapJson<Pokemon[]>(json);
             }
-            console.log(`[Config] Web pokemon data not found, using default`);
             return DEFAULT_POKEMON;
-        } catch (err) {
-            console.warn(`[Config] Error loading web pokemon data:`, err);
+        } catch (error) {
+            console.warn(`[Config] Error cargando datos de pokémon web:`, error);
             return DEFAULT_POKEMON;
         }
     }
-    console.log(`[Config] Loading pokemon data in Tauri mode`);
+
+    // Modo Tauri: cargar desde sistema de archivos
     const { dir } = await ensureConfigFiles();
-    const p = await join(dir, cfg.dataFile);
-    console.log(`[Config] Pokemon data path: ${p}`);
+    const dataPath = await join(dir, cfg.dataFile);
+
     try {
-        const raw = await readTextFile(p);
+        const raw = await readTextFile(dataPath);
         const data = JSON.parse(raw) as Pokemon[];
-        console.log(`[Config] Loaded ${data.length} pokemon from: ${p}`);
+        console.log(`[Config] Cargados ${data.length} pokémon desde: ${cfg.dataFile}`);
         return data;
-    } catch (err) {
-        console.warn(`[Config] Error loading pokemon data, using default:`, err);
+    } catch (error) {
+        console.warn(`[Config] Error cargando datos de pokémon, usando por defecto:`, error);
         return DEFAULT_POKEMON;
     }
 }
 
+// Abre la carpeta de configuración del perfil actual
 export async function openConfigFolder(): Promise<void> {
     if (!isTauri) return;
+
     const currentProfileId = await getCurrentProfile();
     const dir = await getProfileDir(currentProfileId);
     await openPath(dir);
